@@ -404,10 +404,37 @@ CrIStMa has no built-in instrument preset and does not read refinement project
 files. Every peak kernel is area-normalized and evaluated only in a local
 window. The configurable `max_points` limit is checked before allocating the
 output array; an oversized request raises `PowderProfileLimitError` rather than
-returning a truncated scientific result. Profile v1 represents **instrument
-broadening only**. Crystallite size,
-microstrain, preferred orientation, absorption, background, asymmetry,
-experimental matching, and refinement remain separate future layers.
+returning a truncated scientific result.
+
+An optional isotropic sample model adds phase-local coherent-domain size and
+microstrain broadening:
+
+```python
+from cristma.diffraction import IsotropicSampleBroadening
+
+sample = IsotropicSampleBroadening(
+    crystallite_size_nm=80.0,
+    microstrain=8.0e-4,
+    scherrer_constant=0.9,
+)
+profile = PowderProfileCalculator().calculate(
+    phase_lines,
+    grid,
+    instrument,
+    sample_broadening=sample,
+)
+```
+
+Each call describes one phase. Size is an isotropic Lorentzian Scherrer
+contribution, while microstrain is an isotropic Gaussian
+`4 * microstrain * tan(theta)` contribution. They are combined with the
+explicit instrument components before the TCH pseudo-Voigt approximation.
+Every radiation component uses its own wavelength, including K-alpha
+doublets. If the consuming application has no instrument calibration, the
+same sample model can be combined with `ConstantWidthProfile`; CrIStMa never
+invents an instrument setting. Anisotropic size/strain, preferred orientation,
+absorption, background, asymmetry, experimental matching, and refinement
+remain outside this minimal forward calculation.
 
 ## Design principles
 
@@ -453,11 +480,12 @@ The current development version adds reciprocal metrics, bounded reflection
 generation, exact systematic absences, reciprocal symmetry orbits,
 crystallographic multiplicity, Friedel relations, neutral-atom structure
 factors, intrinsic multi-component powder lines, selectable X-ray sources, and
-Bragg–Brentano Lorentz–polarization corrections, plus minimal instrument-only
-calculated profiles on explicit grids, to the published beta's
+Bragg–Brentano Lorentz–polarization corrections, plus minimal calculated
+profiles on explicit grids and optional phase-local isotropic
+size/microstrain broadening, to the published beta's
 structural I/O, symmetry, geometry, crystal chemistry, and topology layers. It
-does not yet calculate sample broadening or corrections, neutron structure
-factors, experimental matching, or structure refinement.
+does not calculate anisotropic sample broadening or corrections, neutron
+structure factors, experimental matching, or structure refinement.
 
 ## Roadmap
 
@@ -466,7 +494,7 @@ Planned scientific layers are developed as independent milestones:
 1. energy-dependent and additional scattering contexts;
 2. additional powder geometries, sample corrections, and explicit instrument
    models;
-3. sample-broadening contributions and neutron scattering;
+3. anisotropic sample broadening and neutron scattering;
 4. additional structural transforms, hierarchy and topology tools, and
    refinement built over the same forward calculations.
 

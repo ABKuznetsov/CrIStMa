@@ -96,7 +96,7 @@ class TchProfile:
                 _finite(getattr(self, field_name), field_name.upper()),
             )
 
-    def _width_and_mixing_at(self, two_theta_deg: float) -> tuple[float, float]:
+    def _component_widths_at(self, two_theta_deg: float) -> tuple[float, float]:
         angle = _finite(two_theta_deg, "two-theta")
         if not 0.0 <= angle < 180.0:
             raise ValueError("two-theta must be within [0, 180) degrees")
@@ -116,24 +116,95 @@ class TchProfile:
             raise ValueError(
                 "TCH Lorentzian width is negative at the evaluated angle"
             )
-        hg = gaussian_fwhm
-        hl = lorentzian_fwhm
-        total = (
-            hg**5
-            + 2.69269 * hg**4 * hl
-            + 2.42843 * hg**3 * hl**2
-            + 4.47163 * hg**2 * hl**3
-            + 0.07842 * hg * hl**4
-            + hl**5
-        ) ** 0.2
-        ratio = hl / total
-        mixing = 1.36603 * ratio - 0.47719 * ratio**2 + 0.11116 * ratio**3
-        return total, min(1.0, max(0.0, mixing))
+        return gaussian_fwhm, lorentzian_fwhm
+
+    def _width_and_mixing_at(self, two_theta_deg: float) -> tuple[float, float]:
+        return _tch_width_and_mixing(*self._component_widths_at(two_theta_deg))
 
     def fwhm_deg_at(self, two_theta_deg: float) -> float:
         """Return the TCH total FWHM at an explicit two-theta angle."""
 
         return self._width_and_mixing_at(two_theta_deg)[0]
+
+
+@dataclass(frozen=True, slots=True)
+class IsotropicSampleBroadening:
+    """Phase-local isotropic crystallite-size and microstrain broadening.
+
+    Size contributes a Lorentzian Scherrer FWHM. Microstrain contributes a
+    Gaussian FWHM proportional to ``tan(theta)``. Both returned widths are in
+    two-theta degrees.
+    """
+
+    crystallite_size_nm: float | None = None
+    microstrain: float | None = None
+    scherrer_constant: float = 0.9
+
+    def __post_init__(self) -> None:
+        size = self.crystallite_size_nm
+        if size is not None:
+            size = _positive_finite(size, "crystallite size")
+            object.__setattr__(self, "crystallite_size_nm", size)
+        strain = self.microstrain
+        if strain is not None:
+            strain = _finite(strain, "microstrain")
+            if strain < 0.0:
+                raise ValueError("microstrain must be non-negative")
+            object.__setattr__(self, "microstrain", strain)
+        object.__setattr__(
+            self,
+            "scherrer_constant",
+            _positive_finite(self.scherrer_constant, "Scherrer constant"),
+        )
+        if size is None and (strain is None or strain == 0.0):
+            raise ValueError("at least one sample-broadening contribution is required")
+
+    def component_fwhm_deg_at(
+        self,
+        two_theta_deg: float,
+        wavelength_angstrom: float,
+    ) -> tuple[float, float]:
+        """Return ``(Gaussian strain, Lorentzian size)`` FWHM in degrees."""
+
+        angle = _finite(two_theta_deg, "two-theta")
+        if not 0.0 <= angle < 180.0:
+            raise ValueError("two-theta must be within [0, 180) degrees")
+        wavelength = _positive_finite(wavelength_angstrom, "wavelength")
+        theta = math.radians(angle / 2.0)
+        gaussian = (
+            0.0
+            if self.microstrain is None
+            else math.degrees(4.0 * self.microstrain * math.tan(theta))
+        )
+        lorentzian = (
+            0.0
+            if self.crystallite_size_nm is None
+            else math.degrees(
+                self.scherrer_constant
+                * wavelength
+                / (10.0 * self.crystallite_size_nm * math.cos(theta))
+            )
+        )
+        return gaussian, lorentzian
+
+
+def _tch_width_and_mixing(
+    gaussian_fwhm: float,
+    lorentzian_fwhm: float,
+) -> tuple[float, float]:
+    hg = gaussian_fwhm
+    hl = lorentzian_fwhm
+    total = (
+        hg**5
+        + 2.69269 * hg**4 * hl
+        + 2.42843 * hg**3 * hl**2
+        + 4.47163 * hg**2 * hl**3
+        + 0.07842 * hg * hl**4
+        + hl**5
+    ) ** 0.2
+    ratio = hl / total
+    mixing = 1.36603 * ratio - 0.47719 * ratio**2 + 0.11116 * ratio**3
+    return total, min(1.0, max(0.0, mixing))
 
 
 class ProfileIntensityBasis(str, Enum):
@@ -145,7 +216,7 @@ class ProfileIntensityBasis(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PowderProfileProvenance:
-    """Exact numerical convention used to calculate a sampled profile."""
+    """Exact instrument and optional sample inputs of a sampled profile."""
 
     method: str
     version: str
@@ -158,6 +229,7 @@ class PowderProfileProvenance:
     max_points: int | None
     lines_considered: int
     lines_contributed: int
+    sample_broadening: IsotropicSampleBroadening | None = None
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -170,12 +242,21 @@ class PowderProfileProvenance:
                 raise ValueError(f"{name} must not be empty")
         if not isinstance(self.intensity_basis, ProfileIntensityBasis):
             raise TypeError("intensity_basis must be ProfileIntensityBasis")
-        if self.broadening_scope != "instrument_only":
-            raise ValueError("profile v1 supports instrument broadening only")
+        expected_scope = (
+            "instrument_only"
+            if self.sample_broadening is None
+            else "instrument_and_isotropic_sample"
+        )
+        if self.broadening_scope != expected_scope:
+            raise ValueError("profile broadening scope disagrees with its inputs")
         if not isinstance(
             self.instrument_profile, (ConstantWidthProfile, TchProfile)
         ):
             raise TypeError("instrument_profile must be a supported profile model")
+        if self.sample_broadening is not None and not isinstance(
+            self.sample_broadening, IsotropicSampleBroadening
+        ):
+            raise TypeError("sample_broadening must be IsotropicSampleBroadening or None")
         object.__setattr__(
             self, "zero_shift_deg", _finite(self.zero_shift_deg, "zero shift")
         )
@@ -234,6 +315,7 @@ class CalculatedProfile:
 __all__ = [
     "CalculatedProfile",
     "ConstantWidthProfile",
+    "IsotropicSampleBroadening",
     "PowderProfileProvenance",
     "ProfileIntensityBasis",
     "TchProfile",

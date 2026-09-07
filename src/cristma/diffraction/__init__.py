@@ -36,6 +36,7 @@ from .powder_models import (
 from .profile_models import (
     CalculatedProfile,
     ConstantWidthProfile,
+    IsotropicSampleBroadening,
     PowderProfileProvenance,
     ProfileIntensityBasis,
     TchProfile,
@@ -63,6 +64,7 @@ __all__ = [
     "ExtinctionCause",
     "ExtinctionCauseKind",
     "ExtinctionResult",
+    "IsotropicSampleBroadening",
     "MillerIndex",
     "PhaseBucketEvidence",
     "PowderLine",

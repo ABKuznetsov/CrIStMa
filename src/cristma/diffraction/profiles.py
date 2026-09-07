@@ -13,10 +13,12 @@ from .powder_models import PowderLineSet
 from .profile_models import (
     CalculatedProfile,
     ConstantWidthProfile,
+    IsotropicSampleBroadening,
     PowderProfileProvenance,
     ProfileIntensityBasis,
     TchProfile,
     UniformTwoThetaGrid,
+    _tch_width_and_mixing,
 )
 
 
@@ -37,7 +39,7 @@ class PowderProfileLimitError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class PowderProfileCalculator:
-    """Apply an instrument-only broadening function on an explicit grid."""
+    """Apply explicit instrument and optional sample broadening on a grid."""
 
     max_points: int | None = 1_000_000
 
@@ -65,6 +67,7 @@ class PowderProfileCalculator:
         broadening: ConstantWidthProfile | TchProfile,
         *,
         zero_shift_deg: float = 0.0,
+        sample_broadening: IsotropicSampleBroadening | None = None,
     ) -> CalculatedProfile:
         if not isinstance(lines, (PowderLineSet, CorrectedPowderLineSet)):
             raise TypeError("lines must be PowderLineSet or CorrectedPowderLineSet")
@@ -72,6 +75,12 @@ class PowderProfileCalculator:
             raise TypeError("grid must be UniformTwoThetaGrid")
         if not isinstance(broadening, (ConstantWidthProfile, TchProfile)):
             raise TypeError("broadening must be ConstantWidthProfile or TchProfile")
+        if sample_broadening is not None and not isinstance(
+            sample_broadening, IsotropicSampleBroadening
+        ):
+            raise TypeError(
+                "sample_broadening must be IsotropicSampleBroadening or None"
+            )
         if isinstance(zero_shift_deg, bool) or not isinstance(
             zero_shift_deg, (int, float)
         ):
@@ -88,15 +97,22 @@ class PowderProfileCalculator:
         profile = np.zeros(angles.size, dtype=float)
         if isinstance(lines, CorrectedPowderLineSet):
             source_lines = lines.lines
+            powder_lines = lines.powder_lines.lines
             basis = ProfileIntensityBasis.CORRECTED
             intensities = tuple(item.corrected_line_intensity for item in source_lines)
         else:
             source_lines = lines.lines
+            powder_lines = source_lines
             basis = ProfileIntensityBasis.INTRINSIC
             intensities = tuple(item.intrinsic_line_intensity for item in source_lines)
 
         contributed = 0
-        for line, line_intensity in zip(source_lines, intensities, strict=True):
+        for line, powder_line, line_intensity in zip(
+            source_lines,
+            powder_lines,
+            intensities,
+            strict=True,
+        ):
             if line_intensity == 0.0:
                 continue
             original_center = line.two_theta_deg
@@ -106,6 +122,24 @@ class PowderProfileCalculator:
                 mixing = 0.0
             else:
                 fwhm, mixing = broadening._width_and_mixing_at(original_center)
+            if sample_broadening is not None:
+                if isinstance(broadening, ConstantWidthProfile):
+                    instrument_gaussian = broadening.fwhm_deg
+                    instrument_lorentzian = 0.0
+                else:
+                    instrument_gaussian, instrument_lorentzian = (
+                        broadening._component_widths_at(original_center)
+                    )
+                sample_gaussian, sample_lorentzian = (
+                    sample_broadening.component_fwhm_deg_at(
+                        original_center,
+                        powder_line.wavelength_angstrom,
+                    )
+                )
+                fwhm, mixing = _tch_width_and_mixing(
+                    math.hypot(instrument_gaussian, sample_gaussian),
+                    instrument_lorentzian + sample_lorentzian,
+                )
             radius = _LOCAL_WINDOW_FWHM * fwhm
             raw_left = math.ceil(
                 (center - radius - grid.start_deg) / grid.step_deg
@@ -138,11 +172,17 @@ class PowderProfileCalculator:
             if isinstance(broadening, ConstantWidthProfile)
             else "tch_pseudo_voigt"
         )
+        if sample_broadening is not None:
+            model_id += "+isotropic_sample_tch"
         provenance = PowderProfileProvenance(
             method="cristma.diffraction.PowderProfileCalculator",
-            version="1",
+            version="2",
             broadening_model=model_id,
-            broadening_scope="instrument_only",
+            broadening_scope=(
+                "instrument_only"
+                if sample_broadening is None
+                else "instrument_and_isotropic_sample"
+            ),
             instrument_profile=broadening,
             intensity_basis=basis,
             zero_shift_deg=shift,
@@ -150,6 +190,7 @@ class PowderProfileCalculator:
             max_points=self.max_points,
             lines_considered=len(source_lines),
             lines_contributed=contributed,
+            sample_broadening=sample_broadening,
         )
         return CalculatedProfile(
             two_theta_deg=tuple(float(value) for value in angles),
