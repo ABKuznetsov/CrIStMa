@@ -15,6 +15,7 @@ from cristma.core.precision import reported_numeric_error
 from cristma.crystallography.catalog import SpaceGroupCatalog
 from cristma.crystallography.orbit import assign_wyckoff, build_orbit
 from cristma.crystallography.space_group import SpaceGroupSetting
+from cristma.crystallography.symmetry_context import canonical_operation_key
 from cristma.structure import (
     CrystalStructure,
     DisplacementParameters,
@@ -512,6 +513,196 @@ def _operation_position(
     rotation = np.asarray(operation.rotation, dtype=float)
     translation = np.asarray(operation.translation, dtype=float)
     return rotation @ coordinates + translation
+
+
+def _symmetry_relation(
+    representative: IndependentSite,
+    candidate: IndependentSite,
+    operations: tuple[AffineOperation, ...],
+) -> tuple[str, tuple[int, int, int]] | None:
+    representative_position = np.asarray(
+        [float(value.value) for value in representative.fractional]
+    )
+    candidate_position = np.asarray(
+        [float(value.value) for value in candidate.fractional]
+    )
+    representative_errors = tuple(
+        _reported_coordinate_error(value) for value in representative.fractional
+    )
+    candidate_errors = tuple(
+        _reported_coordinate_error(value) for value in candidate.fractional
+    )
+    for operation in operations:
+        rotation = np.asarray(operation.rotation, dtype=float)
+        transformed = _operation_position(operation, representative_position)
+        delta = transformed - candidate_position
+        lattice = np.rint(delta)
+        periodic_residual = delta - lattice
+        if all(
+            abs(periodic_residual[row])
+            <= max(
+                1e-12,
+                math.nextafter(
+                    candidate_errors[row]
+                    + math.fsum(
+                        abs(rotation[row, column]) * representative_errors[column]
+                        for column in range(3)
+                    ),
+                    math.inf,
+                ),
+            )
+            for row in range(3)
+        ):
+            return (
+                canonical_operation_key(operation),
+                tuple(int(value) for value in lattice),
+            )
+    return None
+
+
+def _symmetry_merge_conflicts(
+    representative: IndependentSite,
+    candidate: IndependentSite,
+) -> tuple[str, ...]:
+    conflicts: list[str] = []
+    representative_components = tuple(
+        (
+            component.species,
+            float(component.occupancy.value),
+            component.oxidation_state,
+        )
+        for component in representative.components
+    )
+    candidate_components = tuple(
+        (
+            component.species,
+            float(component.occupancy.value),
+            component.oxidation_state,
+        )
+        for component in candidate.components
+    )
+    if representative_components != candidate_components:
+        conflicts.append("components")
+    if any(
+        value is not None
+        for value in (
+            representative.disorder_assembly,
+            representative.disorder_group,
+            candidate.disorder_assembly,
+            candidate.disorder_group,
+        )
+    ):
+        conflicts.append("disorder")
+    if (
+        representative.wyckoff is not None
+        and candidate.wyckoff is not None
+        and representative.wyckoff != candidate.wyckoff
+    ):
+        conflicts.append("wyckoff")
+    if (
+        representative.reported_multiplicity is not None
+        and candidate.reported_multiplicity is not None
+        and representative.reported_multiplicity != candidate.reported_multiplicity
+    ):
+        conflicts.append("reported_multiplicity")
+    if representative.calculated_multiplicity != candidate.calculated_multiplicity:
+        conflicts.append("calculated_multiplicity")
+    if representative.displacement != candidate.displacement:
+        conflicts.append("displacement")
+    return tuple(conflicts)
+
+
+def _source_aliases(
+    site: IndependentSite,
+) -> tuple[tuple[int, ...], tuple[str, ...], tuple[str, ...]]:
+    raw_rows = site.metadata.get("symmetry_source_rows")
+    rows = (
+        tuple(int(value) for value in raw_rows)
+        if isinstance(raw_rows, tuple)
+        else (int(site.metadata["source_row"]),)
+    )
+    raw_labels = site.metadata.get("symmetry_source_labels")
+    labels = (
+        tuple(str(value) for value in raw_labels)
+        if isinstance(raw_labels, tuple)
+        else (site.label,)
+    )
+    raw_ids = site.metadata.get("symmetry_source_site_ids")
+    site_ids = (
+        tuple(str(value) for value in raw_ids)
+        if isinstance(raw_ids, tuple)
+        else (site.id,)
+    )
+    return rows, labels, site_ids
+
+
+def _collapse_symmetry_expanded_sites(
+    sites: tuple[IndependentSite, ...],
+    operations: tuple[AffineOperation, ...],
+    diagnostics: list[Diagnostic],
+) -> tuple[IndependentSite, ...]:
+    if len(operations) <= 1:
+        return sites
+    consumed: set[int] = set()
+    collapsed: list[IndependentSite] = []
+    for index, representative in enumerate(sites):
+        if index in consumed:
+            continue
+        group = [representative]
+        relations: list[tuple[str, str, tuple[int, int, int]]] = []
+        for candidate_index in range(index + 1, len(sites)):
+            if candidate_index in consumed:
+                continue
+            candidate = sites[candidate_index]
+            relation = _symmetry_relation(representative, candidate, operations)
+            if relation is None:
+                continue
+            conflicts = _symmetry_merge_conflicts(representative, candidate)
+            if conflicts:
+                diagnostics.append(
+                    Diagnostic(
+                        Severity.WARNING,
+                        "cif.map.symmetry_equivalent_sites_unmerged",
+                        f"Symmetry-related sites {representative.label} and "
+                        f"{candidate.label} were not merged because "
+                        f"{', '.join(conflicts)} differ.",
+                    )
+                )
+                continue
+            group.append(candidate)
+            consumed.add(candidate_index)
+            relations.append((candidate.id, relation[0], relation[1]))
+        if len(group) == 1:
+            collapsed.append(representative)
+            continue
+
+        rows: list[int] = []
+        labels: list[str] = []
+        site_ids: list[str] = []
+        for site in group:
+            source_rows, source_labels, source_site_ids = _source_aliases(site)
+            rows.extend(source_rows)
+            labels.extend(source_labels)
+            site_ids.extend(source_site_ids)
+        metadata = dict(representative.metadata)
+        metadata.update(
+            {
+                "symmetry_source_rows": tuple(rows),
+                "symmetry_source_labels": tuple(labels),
+                "symmetry_source_site_ids": tuple(site_ids),
+                "symmetry_source_relations": tuple(relations),
+            }
+        )
+        collapsed.append(replace(representative, metadata=metadata))
+        diagnostics.append(
+            Diagnostic(
+                Severity.WARNING,
+                "cif.map.symmetry_expanded_sites_collapsed",
+                f"{representative.label}: collapsed {len(group) - 1} redundant "
+                f"symmetry-related atom row(s): {', '.join(labels[1:])}.",
+            )
+        )
+    return tuple(collapsed)
 
 
 def _normalize_special_position(
@@ -1133,7 +1324,11 @@ def map_cif_structures(
             checked_sites.append(checked_site)
         if block_failed:
             continue
-        sites = tuple(checked_sites)
+        sites = _collapse_symmetry_expanded_sites(
+            tuple(checked_sites),
+            symmetry.operations,
+            diagnostics,
+        )
         structures.append(
             CrystalStructure(
                 name=block.name,
