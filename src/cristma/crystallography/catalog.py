@@ -21,6 +21,18 @@ _SCHEMA_VERSION = "1.0.0"
 _DATASET_ID = "cristma.crystallography.spglib"
 
 
+def _operation_signature(operations: tuple[AffineOperation, ...]) -> tuple[object, ...]:
+    return tuple(
+        sorted(
+            (
+                operation.normalized().rotation,
+                operation.normalized().translation,
+            )
+            for operation in operations
+        )
+    )
+
+
 def _normalized_symbol(value: str) -> str:
     return " ".join(value.casefold().split())
 
@@ -140,17 +152,28 @@ class SpaceGroupCatalog:
         init=False,
         repr=False,
     )
+    _by_operation_signature: Mapping[tuple[object, ...], tuple[SpaceGroupSetting, ...]] = field(
+        init=False,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         by_setting: dict[int, SpaceGroupSetting] = {}
         by_number: dict[int, list[SpaceGroupSetting]] = {}
         by_hall: dict[str, list[SpaceGroupSetting]] = {}
+        by_operation_signature: dict[tuple[object, ...], list[SpaceGroupSetting]] = {}
         for setting in self.settings:
             if setting.setting_id in by_setting:
                 raise ValueError(f"duplicate Hall setting {setting.setting_id}")
             by_setting[setting.setting_id] = setting
             by_number.setdefault(setting.number, []).append(setting)
             by_hall.setdefault(_normalized_symbol(setting.hall_symbol), []).append(setting)
+            by_operation_signature.setdefault(
+                _operation_signature(setting.symmetry_operations),
+                [],
+            ).append(setting)
         object.__setattr__(self, "_by_setting", MappingProxyType(by_setting))
         object.__setattr__(
             self,
@@ -161,6 +184,16 @@ class SpaceGroupCatalog:
             self,
             "_by_hall",
             MappingProxyType({key: tuple(value) for key, value in by_hall.items()}),
+        )
+        object.__setattr__(
+            self,
+            "_by_operation_signature",
+            MappingProxyType(
+                {
+                    key: tuple(value)
+                    for key, value in by_operation_signature.items()
+                }
+            ),
         )
 
     @classmethod

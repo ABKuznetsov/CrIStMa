@@ -256,7 +256,20 @@ The first scattering layer calculates forward neutral-atom X-ray amplitudes
 from a `CrystalStructure` and its generated `ReflectionSet`:
 
 ```python
+from cristma.crystallography import (
+    SpaceGroupCatalog,
+    SpaceGroupSettingResolutionStatus,
+    resolve_space_group_setting,
+)
 from cristma.diffraction import StructureFactorCalculator, XRayScatteringContext
+
+resolution = resolve_space_group_setting(
+    crystal.space_group,
+    SpaceGroupCatalog.default(),
+)
+if resolution.status is not SpaceGroupSettingResolutionStatus.RESOLVED:
+    raise ValueError("the structure has no unique catalog setting")
+setting = resolution.setting
 
 factors = StructureFactorCalculator().calculate(
     structure=crystal,
@@ -265,6 +278,12 @@ factors = StructureFactorCalculator().calculate(
     context=XRayScatteringContext.default(),
 )
 ```
+
+Setting resolution compares the complete exact operation set in the reported
+fractional basis. It returns `AMBIGUOUS` or `UNRESOLVED` instead of selecting a
+setting from a Hermann–Mauguin symbol or space-group number alone. The
+diffraction calculators themselves still accept only a uniquely resolved
+`SpaceGroupSetting`.
 
 The calculator expands independent sites with the supplied exact symmetry,
 deduplicates special positions, applies occupancies and isotropic displacement

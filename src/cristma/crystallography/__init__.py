@@ -1,6 +1,12 @@
 """Catalog-backed structural crystallography tools."""
 
 from .space_group import SpaceGroupSetting
+from .setting_resolution import (
+    SpaceGroupSettingResolution,
+    SpaceGroupSettingResolutionProvenance,
+    SpaceGroupSettingResolutionStatus,
+    resolve_space_group_setting,
+)
 from .wyckoff import AffineCoordinateMap, WyckoffPosition
 from .catalog import SpaceGroupCatalog
 from .orbit import (
@@ -76,6 +82,9 @@ __all__ = [
     "SiteSymmetry",
     "SpaceGroupCatalog",
     "SpaceGroupSetting",
+    "SpaceGroupSettingResolution",
+    "SpaceGroupSettingResolutionProvenance",
+    "SpaceGroupSettingResolutionStatus",
     "SymmetryContactOrbit",
     "SymmetryContext",
     "SymmetryContextInvariantError",
@@ -96,4 +105,5 @@ __all__ = [
     "identity_relation",
     "invert_periodic_relation",
     "periodic_endpoint_instance",
+    "resolve_space_group_setting",
 ]
