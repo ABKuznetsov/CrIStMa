@@ -7,6 +7,7 @@ import pytest
 from cristma.core import MeasuredValue, UnitCell
 from cristma.crystallography import (
     DirectBasisConvention,
+    SpaceGroupCatalog,
     SymmetryContext,
     SymmetryContextInvariantError,
     SymmetrySourceKind,
@@ -99,6 +100,38 @@ def test_rotation_incompatible_with_cell_metric_is_rejected() -> None:
 
     with pytest.raises(SymmetryContextInvariantError) as caught:
         SymmetryContext.from_operations((IDENTITY, swap_xy), _orthogonal_cell(4.0, 5.0))
+
+    assert caught.value.code == "symmetry.context.metric_incompatible"
+
+
+def _rounded_fd3m_cell(*, b: float = 9.108879) -> UnitCell:
+    return UnitCell(
+        MeasuredValue(9.10888, 0.00003, "9.10888(3)"),
+        MeasuredValue(b, None, str(b)),
+        MeasuredValue(9.108879, None, "9.108879"),
+        MeasuredValue(90.0, None, "90.0"),
+        MeasuredValue(90.0, None, "90.0"),
+        MeasuredValue(90.0, None, "90.0"),
+    )
+
+
+def test_metric_rounding_within_reported_cell_precision_is_recoverable() -> None:
+    setting = SpaceGroupCatalog.default().by_setting(526)
+
+    context = SymmetryContext.from_setting(setting, _rounded_fd3m_cell())
+
+    assert context.metric_tolerance > 1e-8
+    assert any(
+        item.code == "symmetry.context.metric_within_reported_precision"
+        for item in context.diagnostics
+    )
+
+
+def test_metric_mismatch_outside_reported_cell_precision_is_rejected() -> None:
+    setting = SpaceGroupCatalog.default().by_setting(526)
+
+    with pytest.raises(SymmetryContextInvariantError) as caught:
+        SymmetryContext.from_setting(setting, _rounded_fd3m_cell(b=9.107879))
 
     assert caught.value.code == "symmetry.context.metric_incompatible"
 

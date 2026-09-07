@@ -90,21 +90,26 @@ with the conflicting fields.
 ## Reported-precision metric compatibility
 
 `SymmetryContext` retains its explicit configured metric tolerance as a strict
-numerical floor. In addition, it derives a source-bound tolerance from the six
-`MeasuredValue` cell parameters:
+numerical floor. In addition, it derives componentwise source bounds for the
+direct metric from the six `MeasuredValue` cell parameters:
 
 ```text
-edge contribution  = reported_error / edge_length
-angle contribution = radians(reported_error_deg)
-reported_metric_tolerance = 4 * max(all contributions)
-effective tolerance = max(configured floor, reported_metric_tolerance)
+G11 = a^2
+G22 = b^2
+G33 = c^2
+G12 = ab cos(gamma)
+G13 = ac cos(beta)
+G23 = bc cos(alpha)
 ```
 
 `reported_error` is three standard uncertainties when an uncertainty is
 present, otherwise half a unit in the final reported decimal place. Missing raw
-precision contributes zero. The factor four conservatively covers the
-quadratic metric terms and combined angular contributions; it is part of the
-versioned numerical convention.
+precision contributes zero. Interval bounds for the six formulae above are
+calculated from the reported parameter intervals. For each exact rotation,
+those componentwise metric bounds are propagated through `R^T G R`; the
+residual of each output component is compared only with its own propagated
+bound plus the configured numerical floor. A coarsely written angle therefore
+cannot relax an unrelated diagonal edge-length constraint.
 
 When every operation preserves the metric only under the source-derived part
 of the tolerance, the context is valid and emits:
@@ -113,9 +118,11 @@ of the tolerance, the context is valid and emits:
 symmetry.context.metric_within_reported_precision
 ```
 
-The diagnostic records the configured floor, reported tolerance, effective
-tolerance and maximum observed normalized residual. The original cell values
-are not averaged or replaced.
+The diagnostic records the configured floor, maximum normalized propagated
+bound and maximum observed normalized residual. The public
+`metric_tolerance` records the larger of the configured floor and that maximum
+normalized bound for provenance; validation itself remains componentwise. The
+original cell values are not averaged or replaced.
 
 If any rotation exceeds the effective tolerance,
 `SymmetryContextInvariantError` remains mandatory with code
@@ -157,4 +164,3 @@ sites or context diagnostics as they do for other normalized input state.
 - operation ordering and integer-shifted coordinates do not change grouping;
 - ordinary asymmetric-unit CIF files retain the same sites and IDs;
 - the complete CrIStMa test suite and Finder CIF corpus remain valid.
-

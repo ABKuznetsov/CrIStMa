@@ -14,6 +14,7 @@ from typing import Iterable, Mapping
 import numpy as np
 
 from cristma.core import UnitCell
+from cristma.core.precision import reported_numeric_error
 from cristma.diagnostics import Diagnostic, Severity
 from cristma.symmetry.affine import AffineOperation, Matrix3, Vector3
 from cristma.symmetry.orbit import SpaceGroupDefinition
@@ -196,27 +197,110 @@ def _digest(value: object) -> str:
     return hashlib.sha256(serialized).hexdigest()
 
 
+def _interval_product(*intervals: tuple[float, float]) -> tuple[float, float]:
+    lower, upper = intervals[0]
+    for next_lower, next_upper in intervals[1:]:
+        products = (
+            lower * next_lower,
+            lower * next_upper,
+            upper * next_lower,
+            upper * next_upper,
+        )
+        lower, upper = min(products), max(products)
+    return lower, upper
+
+
+def _reported_metric_error(cell: UnitCell) -> np.ndarray:
+    edges = (cell.a, cell.b, cell.c)
+    angles = (cell.alpha, cell.beta, cell.gamma)
+    edge_intervals = tuple(
+        (
+            max(0.0, float(value.value) - reported_numeric_error(value)),
+            float(value.value) + reported_numeric_error(value),
+        )
+        for value in edges
+    )
+    cosine_intervals = []
+    for value in angles:
+        center = float(value.value)
+        error = reported_numeric_error(value)
+        lower_angle = max(0.0, center - error)
+        upper_angle = min(180.0, center + error)
+        cosine_intervals.append(
+            (
+                math.cos(math.radians(upper_angle)),
+                math.cos(math.radians(lower_angle)),
+            )
+        )
+
+    bounds: dict[tuple[int, int], tuple[float, float]] = {}
+    for index, interval in enumerate(edge_intervals):
+        bounds[(index, index)] = _interval_product(interval, interval)
+    for first, second, angle_index in ((1, 2, 0), (0, 2, 1), (0, 1, 2)):
+        bounds[(first, second)] = _interval_product(
+            edge_intervals[first],
+            edge_intervals[second],
+            cosine_intervals[angle_index],
+        )
+
+    metric = np.asarray(cell.metric, dtype=float)
+    error = np.zeros((3, 3), dtype=float)
+    for (first, second), (lower, upper) in bounds.items():
+        deviation = max(
+            abs(metric[first, second] - lower),
+            abs(upper - metric[first, second]),
+        )
+        error[first, second] = deviation
+        error[second, first] = deviation
+    return error
+
+
 def _validate_metric(
     operations: tuple[AffineOperation, ...],
     cell: UnitCell,
     tolerance: float,
-) -> None:
+) -> tuple[float, float, bool]:
     metric = np.asarray(cell.metric, dtype=float)
+    metric_error = _reported_metric_error(cell)
     scale = max(1.0, float(np.max(np.abs(metric))))
+    maximum_residual = 0.0
+    maximum_reported_bound = 0.0
+    recovered = False
     for operation in operations:
         rotation = np.asarray(operation.rotation, dtype=float)
         transformed = rotation.T @ metric @ rotation
-        if not np.allclose(
-            transformed,
-            metric,
-            rtol=tolerance,
-            atol=tolerance * scale,
-        ):
+        residual = np.abs(transformed - metric)
+        absolute_rotation = np.abs(rotation)
+        reported_bound = (
+            absolute_rotation.T @ metric_error @ absolute_rotation
+            + metric_error
+        )
+        allowed = reported_bound + tolerance * scale
+        maximum_residual = max(
+            maximum_residual,
+            float(np.max(residual)) / scale,
+        )
+        maximum_reported_bound = max(
+            maximum_reported_bound,
+            float(np.max(reported_bound)) / scale,
+        )
+        if np.any(residual > allowed):
             raise SymmetryContextInvariantError(
                 "symmetry.context.metric_incompatible",
                 "symmetry rotation is incompatible with the supplied cell metric",
-                evidence=(("operation_key", canonical_operation_key(operation)),),
+                evidence=(
+                    ("operation_key", canonical_operation_key(operation)),
+                    ("maximum_normalized_residual", float(np.max(residual)) / scale),
+                    ("configured_tolerance", tolerance),
+                    (
+                        "maximum_normalized_reported_bound",
+                        float(np.max(reported_bound)) / scale,
+                    ),
+                ),
             )
+        if np.any(residual > tolerance * scale):
+            recovered = True
+    return maximum_residual, maximum_reported_bound, recovered
 
 
 def _validate_and_canonicalize_operations(
@@ -228,6 +312,9 @@ def _validate_and_canonicalize_operations(
     dict[tuple[str, str], tuple[str, tuple[int, int, int]]],
     dict[str, str],
     str,
+    float,
+    float,
+    bool,
 ]:
     if not isinstance(cell, UnitCell):
         raise TypeError("cell must be UnitCell")
@@ -309,8 +396,20 @@ def _validate_and_canonicalize_operations(
             )
         inverses[operation_descriptor] = inverse_descriptor
 
-    _validate_metric(ordered, cell, metric_tolerance)
-    return ordered, products, inverses, identity_descriptor
+    maximum_residual, maximum_reported_bound, recovered = _validate_metric(
+        ordered,
+        cell,
+        metric_tolerance,
+    )
+    return (
+        ordered,
+        products,
+        inverses,
+        identity_descriptor,
+        maximum_residual,
+        maximum_reported_bound,
+        recovered,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,12 +455,45 @@ class SymmetryContext:
         provenance: tuple[tuple[str, object], ...],
         metric_tolerance: float,
     ) -> "SymmetryContext":
-        canonical, descriptor_products, descriptor_inverses, identity_descriptor = (
+        (
+            canonical,
+            descriptor_products,
+            descriptor_inverses,
+            identity_descriptor,
+            maximum_metric_residual,
+            maximum_reported_metric_bound,
+            metric_recovered,
+        ) = (
             _validate_and_canonicalize_operations(
                 operations,
                 cell,
                 metric_tolerance,
             )
+        )
+        effective_metric_tolerance = max(
+            metric_tolerance,
+            maximum_reported_metric_bound,
+        )
+        if metric_recovered:
+            diagnostics = (
+                *diagnostics,
+                Diagnostic(
+                    Severity.WARNING,
+                    "symmetry.context.metric_within_reported_precision",
+                    "Symmetry metric compatibility was accepted within the "
+                    "reported cell-parameter precision.",
+                    recovery=(
+                        f"configured tolerance={metric_tolerance:.8g}; "
+                        f"reported bound={maximum_reported_metric_bound:.8g}; "
+                        f"maximum residual={maximum_metric_residual:.8g}"
+                    ),
+                ),
+            )
+        provenance = (
+            *provenance,
+            ("configured_metric_tolerance", metric_tolerance),
+            ("reported_metric_tolerance", maximum_reported_metric_bound),
+            ("maximum_metric_residual", maximum_metric_residual),
         )
         keys = tuple(canonical_operation_key(operation) for operation in canonical)
         descriptors = tuple(_operation_descriptor(operation) for operation in canonical)
@@ -395,7 +527,7 @@ class SymmetryContext:
                 "cell_fingerprint": cell_digest,
                 "setting_id": setting_id,
                 "source_kind": source_kind.value,
-                "metric_tolerance": metric_tolerance,
+                "metric_tolerance": effective_metric_tolerance,
                 "diagnostics": tuple(
                     (item.severity.value, item.code, item.message, item.recovery)
                     for item in diagnostics
@@ -412,7 +544,7 @@ class SymmetryContext:
             fingerprint=fingerprint,
             setting_id=setting_id,
             source_kind=source_kind,
-            metric_tolerance=metric_tolerance,
+            metric_tolerance=effective_metric_tolerance,
             diagnostics=diagnostics,
             provenance=provenance,
             identity_operation_key=key_by_descriptor[identity_descriptor],

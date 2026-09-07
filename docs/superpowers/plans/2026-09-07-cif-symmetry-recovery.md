@@ -4,7 +4,7 @@
 
 **Goal:** Recover symmetry-constrained rounded cells and CIF atom lists that redundantly contain symmetry-expanded positions, while retaining strict diagnostics and one physical atom image per downstream expansion.
 
-**Architecture:** Centralize reported-number precision in a private core helper, use it to derive a conservative metric tolerance inside `SymmetryContext`, and canonicalize symmetry-equivalent CIF rows after existing site normalization but before constructing `CrystalStructure`. Keep polyhedron geometry defensive so a genuinely unusable hull becomes an incomplete calculated result rather than an exception.
+**Architecture:** Centralize reported-number precision in a private core helper, propagate it componentwise through the direct metric inside `SymmetryContext`, and canonicalize symmetry-equivalent CIF rows after existing site normalization but before constructing `CrystalStructure`. Keep polyhedron geometry defensive so a genuinely unusable hull becomes an incomplete calculated result rather than an exception.
 
 **Tech Stack:** Python 3.11+, immutable dataclasses, exact `Fraction` symmetry operations, NumPy numerical metrics, pytest.
 
@@ -98,7 +98,7 @@ git commit -m "Centralize reported numeric precision"
 - Modify: `tests/orbit_first/test_symmetry_context.py`
 
 **Interfaces:**
-- Produces: private `_reported_metric_tolerance(cell: UnitCell) -> float`
+- Produces: private `_reported_metric_error(cell: UnitCell) -> np.ndarray`
 - Changes: `SymmetryContext.metric_tolerance` stores the effective tolerance; provenance records configured and reported contributions.
 - Produces diagnostic: `symmetry.context.metric_within_reported_precision`
 
@@ -135,16 +135,26 @@ Expected: the rounded-cell case fails with `symmetry.context.metric_incompatible
 
 - [ ] **Step 4: Implement effective tolerance and diagnostic**
 
-Calculate:
+Calculate interval bounds for the direct metric components:
 
 ```python
-edge_terms = tuple(reported_numeric_error(v) / float(v.value) for v in edges)
-angle_terms = tuple(math.radians(reported_numeric_error(v)) for v in angles)
-reported = 4.0 * max((*edge_terms, *angle_terms), default=0.0)
-effective = max(configured, reported)
+G11 = a * a
+G22 = b * b
+G33 = c * c
+G12 = a * b * cos(gamma)
+G13 = a * c * cos(beta)
+G23 = b * c * cos(alpha)
 ```
 
-Validate the operation group exactly as before and validate metric residuals against `effective`. Add the warning only when the maximum residual exceeds `configured` but not `effective`. Record configured tolerance, reported tolerance, effective tolerance and maximum normalized residual in diagnostic text and context provenance.
+Evaluate each formula over the reported parameter intervals and store the
+maximum absolute deviation from the reported metric as a symmetric `3x3`
+error matrix. For each rotation propagate that matrix through `R.T @ G @ R`
+using absolute rotation coefficients, add the source error for the comparison
+component, and compare each residual component with its own propagated bound
+plus `configured * metric_scale`. Add the warning only when the configured
+floor alone would fail but the componentwise reported bounds pass. Record the
+configured tolerance, maximum normalized propagated bound, effective public
+tolerance and maximum normalized residual in diagnostic text and provenance.
 
 - [ ] **Step 5: Verify GREEN and strict group invariants**
 
