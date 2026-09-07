@@ -86,6 +86,14 @@ from .rings import (
     StructuralRingOrbit,
     StructuralRingScope,
 )
+from .molecular import (
+    MolecularAnalysisPolicy,
+    MolecularAnalysisResult,
+    MolecularAnalyzer,
+    MolecularBondOrbit,
+    MolecularComponentKind,
+    MolecularComponentOrbit,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -98,6 +106,12 @@ __all__ = [
     "ContactAnalyzer",
     "ContactOrbitResolution",
     "ContactOrbitResolver",
+    "MolecularAnalysisPolicy",
+    "MolecularAnalysisResult",
+    "MolecularAnalyzer",
+    "MolecularBondOrbit",
+    "MolecularComponentKind",
+    "MolecularComponentOrbit",
     "CoordinationShellAlternative",
     "CoordinationShellOrbit",
     "CoordinationShellOrbitResolver",

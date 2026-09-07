@@ -49,6 +49,7 @@ class ContactAnalysisResult:
     _asymmetric_unit_mapping: AsymmetricUnitMapping = field(repr=False, compare=False)
     _symmetry_context: SymmetryContext = field(repr=False, compare=False)
     pair_table: SymmetryPairTable
+    grammar: CompositionGrammar
     contact_orbits: tuple[ResolvedContactOrbit, ...]
     contact_incidence_orbits: tuple[ContactIncidenceOrbit, ...]
     coordination_shell_orbits: tuple[CoordinationShellOrbit, ...]
@@ -62,6 +63,8 @@ class ContactAnalysisResult:
             raise ValueError("contact result and asymmetric-unit mapping disagree")
         if self.pair_table.symmetry_context_fingerprint != self._symmetry_context.fingerprint:
             raise ValueError("contact result and symmetry context disagree")
+        if not isinstance(self.grammar, CompositionGrammar):
+            raise TypeError("contact result grammar must be CompositionGrammar")
         if {site.id for site in self._structure.sites} != set(self._asymmetric_unit_mapping.by_site_id):
             raise ValueError("contact result mapping belongs to another structure")
         contact_by_id = {
@@ -233,6 +236,7 @@ class ContactAnalyzer:
             mapping,
             symmetry_context,
             pair_table,
+            grammar,
             contact_resolution.contact_orbits,
             incidences,
             shells,

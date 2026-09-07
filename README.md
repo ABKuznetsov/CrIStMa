@@ -55,6 +55,8 @@ desktop applications, and automated data-processing systems.
   chains, layers, or frameworks;
 - find translation-aware finite rings in periodic structural
   representations;
+- resolve intramolecular bond orbits and classify connected components as
+  discrete molecules, chains, layers, or frameworks by exact periodic rank;
 - report recoverable problems as structured diagnostics instead of hiding
   assumptions or silently changing the input.
 
@@ -223,6 +225,23 @@ polyhedra = PolyhedronOrbitBuilder().build(result)
 reference_cell_contacts = result.materialize_contacts(ReferenceCell())
 assert result.contacts == reference_cell_contacts
 ```
+
+Molecular connectivity is a separate calculation over the same resolved
+contact orbits. Its bond boundary is explicit and phase-independent:
+
+```python
+from cristma.crystal_chemistry import MolecularAnalysisPolicy, MolecularAnalyzer
+
+molecular = MolecularAnalyzer(
+    MolecularAnalysisPolicy(maximum_bond_rho=1.25)
+).analyze(result)
+```
+
+The result contains immutable molecular bond and component orbits. Component
+periodicity is derived from exact affine-labelled graph closures: rank zero is
+a discrete molecule, ranks one and two are a chain and layer, and rank three
+is a framework. Packing contacts are not promoted to molecular bonds merely
+because they occurred inside the broader contact-search buffer.
 
 `ContactAnalysisResult` exposes pair orbits, chemically resolved contact
 orbits, oriented incidence orbits, coordination-shell alternatives, explicit
@@ -467,14 +486,17 @@ returns a warning instead of rejecting the complete CIF. The published
 validated symmetry contexts, asymmetric-unit pair orbits, chemical contact
 orbits, oriented incidences, and multiplicity-weighted coordination-shell
 orbits without expanded contacts in the scientific pipeline. The local
-`0.1.0b6` development line unifies reference-cell atom-image identities across
+`0.1.0b6` unifies reference-cell atom-image identities across
 `atomic_view()`, contact materialization, polyhedra, and structural units. It
 also accepts symmetry-constrained cells within their componentwise reported
 precision, collapses redundant symmetry-expanded CIF atom rows conservatively,
 and preserves incomplete polyhedra when hull geometry is unusable. The
-implemented scientific core is covered by automated tests and is ready for
-evaluation and integration. Until the first stable release, public APIs may
-still change when required to correct or clarify scientific contracts.
+`0.1.0b7` development line adds orbit-first molecular bond and component
+analysis with explicit normalized-distance policy and exact periodic-rank
+classification. The implemented scientific core is covered by automated tests
+and is ready for evaluation and integration. Until the first stable release,
+public APIs may still change when required to correct or clarify scientific
+contracts.
 
 The current development version adds reciprocal metrics, bounded reflection
 generation, exact systematic absences, reciprocal symmetry orbits,
