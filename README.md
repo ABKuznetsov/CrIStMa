@@ -162,6 +162,16 @@ trailing `t` attached to a fractional symmetry translation (for example
 `z+1/2t`) is removed only after strict parsing fails, and every repaired
 operation produces a warning with the exact recovered expression.
 
+Cell-metric compatibility and special-position matching respect the precision
+reported by each CIF number; exact symmetry operations themselves remain
+exact. If an atom loop redundantly lists symmetry-generated copies of the same
+site, CrIStMa conservatively collapses only chemically and structurally
+compatible rows and records every source alias in provenance. Conflicting
+species, occupancies, disorder, displacement parameters, or site metadata are
+kept separate and reported diagnostically. Unusable polyhedron hull geometry
+similarly produces an `INCOMPLETE` calculated polyhedron with its valid
+vertices retained instead of aborting the structure analysis.
+
 ## Reflection generation
 
 The first diffraction layer generates complete reciprocal-space reflection
@@ -431,7 +441,10 @@ validated symmetry contexts, asymmetric-unit pair orbits, chemical contact
 orbits, oriented incidences, and multiplicity-weighted coordination-shell
 orbits without expanded contacts in the scientific pipeline. The local
 `0.1.0b6` development line unifies reference-cell atom-image identities across
-`atomic_view()`, contact materialization, polyhedra, and structural units. The
+`atomic_view()`, contact materialization, polyhedra, and structural units. It
+also accepts symmetry-constrained cells within their componentwise reported
+precision, collapses redundant symmetry-expanded CIF atom rows conservatively,
+and preserves incomplete polyhedra when hull geometry is unusable. The
 implemented scientific core is covered by automated tests and is ready for
 evaluation and integration. Until the first stable release, public APIs may
 still change when required to correct or clarify scientific contracts.
