@@ -10,6 +10,21 @@ if TYPE_CHECKING:
     from .occupation import SiteComponent
 
 
+def _expanded_atom_id(
+    structure_id: str | None,
+    site_id: str,
+    fractional: tuple[float, float, float],
+    tolerance: float,
+) -> str:
+    """Return the shared identity of one reference-cell atom image."""
+
+    position_key = tuple(round(value / tolerance) for value in fractional)
+    return (
+        f"expanded:{structure_id or 'unassigned'}:{site_id}:"
+        f"{','.join(map(str, position_key))}"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SourceReference:
     """Location of one scientific record in its source."""

@@ -10,7 +10,11 @@ import numpy as np
 
 from cristma.core.cell import UnitCell
 from cristma.structure.crystal import CrystalStructure, IndependentSite
-from cristma.structure.identity import ExpandedAtom, SymmetryImageProvenance
+from cristma.structure.identity import (
+    ExpandedAtom,
+    SymmetryImageProvenance,
+    _expanded_atom_id,
+)
 from cristma.structure.properties import AtomicPropertyTable
 from cristma.structure.view import AtomicView
 
@@ -140,12 +144,13 @@ def expand_orbit(
                 break
         else:
             cartesian = tuple(float(value) for value in np.asarray(fractional) @ cell.matrix)
-            position_key = tuple(round(value / tolerance) for value in fractional)
             expanded.append(
                 ExpandedAtom(
-                    id=(
-                        f"expanded:{structure_id or 'unassigned'}:{site.id}:"
-                        f"{','.join(map(str, position_key))}"
+                    id=_expanded_atom_id(
+                        structure_id,
+                        site.id,
+                        fractional,
+                        tolerance,
                     ),
                     structure_id=structure_id,
                     source_site_id=site.id,

@@ -17,7 +17,7 @@ from .io.formats import FormatDescriptor, builtin_format_descriptors
 from .io.registry import FormatRegistry
 from .io.result import ReadResult
 
-__version__ = "0.1.0b5"
+__version__ = "0.1.0b6"
 
 _formats = FormatRegistry(builtin_format_descriptors())
 

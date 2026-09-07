@@ -20,10 +20,11 @@ from cristma.crystal_chemistry import (
     StructuralGraphBuilder,
     StructuralRepresentationBuilder,
     StructuralSelectionPolicy,
+    StructuralUnitBuilder,
 )
 from cristma.crystallography import SymmetryContext
 from cristma.structure import CrystalStructure, IndependentSite, SiteComponent
-from cristma.symmetry import AffineOperation
+from cristma.symmetry import AffineOperation, SpaceGroupDefinition
 
 
 def _value(value: float) -> MeasuredValue:
@@ -35,15 +36,23 @@ def _result():
     sites = (
         IndependentSite("Ca", "Ca", (SiteComponent("Ca", _value(1.0)),),
                         (_value(0.0), _value(0.0), _value(0.0))),
-        IndependentSite("O", "O", (SiteComponent("O", _value(1.0)),),
+        IndependentSite("O1", "O1", (SiteComponent("O", _value(1.0)),),
                         (_value(0.2), _value(0.0), _value(0.0))),
+        IndependentSite("O2", "O2", (SiteComponent("O", _value(1.0)),),
+                        (_value(0.3), _value(0.0), _value(0.0))),
     )
-    structure = CrystalStructure("pair", cell, sites)
     identity = AffineOperation(
         ((Fraction(1), Fraction(0), Fraction(0)),
          (Fraction(0), Fraction(1), Fraction(0)),
          (Fraction(0), Fraction(0), Fraction(1))),
         (Fraction(0), Fraction(0), Fraction(0)),
+    )
+    structure = CrystalStructure(
+        "pair",
+        cell,
+        sites,
+        id="fixture:pair",
+        space_group=SpaceGroupDefinition((identity,), "reported"),
     )
     context = SymmetryContext.from_operations((identity,), cell)
     request = CandidateInteraction(
@@ -71,6 +80,34 @@ def test_public_contact_route_materializes_reference_cell_from_orbits() -> None:
         if geometry.geometry_orbit_id in {item.geometry_orbit_id for item in result.contact_orbits}
     )
     assert all(item.resolved_contact_orbit_id for item in result.contacts)
+
+
+def test_materialized_contacts_use_atomic_view_atom_ids() -> None:
+    result = _result()
+    atomic_view_ids = {atom.id for atom in result._structure.atomic_view().atoms}
+    polyhedra = PolyhedronOrbitBuilder().build(result)
+    units = StructuralUnitBuilder().build(result, polyhedra)
+
+    materialized_ids = {
+        atom_ref.atom_id
+        for contact in result.contacts
+        for atom_ref in (contact.first_atom_ref, contact.second_atom_ref)
+    }
+
+    assert materialized_ids <= atomic_view_ids
+    assert {
+        atom_ref.atom_id
+        for polyhedron in polyhedra.polyhedra
+        for atom_ref in (
+            polyhedron.center_atom_ref,
+            *(vertex.atom_ref for vertex in polyhedron.vertices),
+        )
+    } <= atomic_view_ids
+    assert {
+        atom_ref.atom_id
+        for unit in units.unit_orbits
+        for atom_ref in unit.constituent_site_refs
+    } <= atomic_view_ids
 
 
 def test_legacy_expanded_first_symbols_are_not_public() -> None:

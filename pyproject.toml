@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cristma"
-version = "0.1.0b5"
+version = "0.1.0b6"
 description = "Physics-first crystallography, crystal chemistry, and periodic structure analysis"
 readme = "README.md"
 license = "BSD-3-Clause"

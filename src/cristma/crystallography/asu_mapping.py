@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from cristma.structure import CrystalStructure, IndependentSite
+from cristma.structure.identity import _expanded_atom_id
 from cristma.symmetry.orbit import DEFAULT_FRACTIONAL_TOLERANCE
 
 from .periodic_relation import PeriodicSymmetryRelation
@@ -30,10 +31,6 @@ class AsymmetricUnitMappingInvariantError(ValueError):
         super().__init__(message)
         self.code = code
         self.evidence = evidence
-
-
-def _relation_descriptor(relation: PeriodicSymmetryRelation) -> tuple[str, tuple[int, int, int]]:
-    return relation.operation_key, relation.lattice_translation
 
 
 def _wrap_with_translation(
@@ -176,6 +173,7 @@ class AsymmetricUnitMapper:
         self,
         site: IndependentSite,
         context: SymmetryContext,
+        structure_id: str | None,
     ) -> tuple[SiteOrbitMapping, FractionalPosition]:
         reported = tuple(float(value.value) for value in site.fractional)
         source, _ = _wrap_with_translation(reported, self.fractional_tolerance)
@@ -205,12 +203,11 @@ class AsymmetricUnitMapper:
         for fractional, raw_relations in groups:
             relations = tuple(sorted(set(raw_relations)))
             representative = relations[0]
-            image_id = "site-image:" + _digest(
-                {
-                    "site_id": site.id,
-                    "symmetry_action": context.symmetry_action_fingerprint,
-                    "relations": tuple(_relation_descriptor(item) for item in relations),
-                }
+            image_id = _expanded_atom_id(
+                structure_id,
+                site.id,
+                fractional,
+                self.fractional_tolerance,
             )
             images.append(
                 SiteImage(
@@ -290,7 +287,10 @@ class AsymmetricUnitMapper:
                 "independent site IDs must be unique",
             )
 
-        mapped = tuple(self._map_site(site, context) for site in structure.sites)
+        mapped = tuple(
+            self._map_site(site, context, structure.id)
+            for site in structure.sites
+        )
         site_orbits = tuple(sorted((item[0] for item in mapped), key=lambda item: item.independent_site_id))
         normalized_by_id = {
             site.id: normalized

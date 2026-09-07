@@ -172,7 +172,15 @@ def test_catalog_general_and_special_positions_obey_orbit_stabilizer_for_all_set
             for position in positions
         )
 
-        mapping = AsymmetricUnitMapper().build(_structure(cell, *sites), context)
+        structure = CrystalStructure(
+            "catalog-setting-fixture",
+            cell,
+            sites,
+            id=f"catalog-setting:{setting.setting_id}",
+            space_group=setting.definition(provenance="derived"),
+        )
+        mapping = AsymmetricUnitMapper().build(structure, context)
+        expanded_ids = {atom.id for atom in structure.atomic_view().atoms}
 
         for site, position in zip(sites, positions, strict=True):
             orbit = mapping.by_site_id[site.id]
@@ -181,3 +189,6 @@ def test_catalog_general_and_special_positions_obey_orbit_stabilizer_for_all_set
                 len(orbit.reference_cell_images) * len(orbit.stabilizer_relations)
                 == len(setting.symmetry_operations)
             ), setting.setting_id
+            assert {
+                image.image_id for image in orbit.reference_cell_images
+            } <= expanded_ids, setting.setting_id

@@ -406,11 +406,13 @@ neutral-atom X-ray structure factors with explicit scattering provenance. The
 `0.1.0b4` keeps a usable coordinate structure when
 an anisotropic ADP fails the final orbit-consistency check: it retains a
 reported `U_iso_or_equiv` when available, otherwise omits only that ADP, and
-returns a warning instead of rejecting the complete CIF. The local `0.1.0b5`
-development line introduces orbit-first direct-space crystal chemistry:
+returns a warning instead of rejecting the complete CIF. The published
+`0.1.0b5` release introduces orbit-first direct-space crystal chemistry:
 validated symmetry contexts, asymmetric-unit pair orbits, chemical contact
 orbits, oriented incidences, and multiplicity-weighted coordination-shell
-orbits without expanded contacts in the scientific pipeline. The
+orbits without expanded contacts in the scientific pipeline. The local
+`0.1.0b6` development line unifies reference-cell atom-image identities across
+`atomic_view()`, contact materialization, polyhedra, and structural units. The
 implemented scientific core is covered by automated tests and is ready for
 evaluation and integration. Until the first stable release, public APIs may
 still change when required to correct or clarify scientific contracts.
