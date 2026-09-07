@@ -243,6 +243,12 @@ def _representative_polyhedron(
             centroid = tuple(float(value) for value in centroid_value)
             center_offset = float(np.linalg.norm(centroid_value))
         except ValueError as error:
+            faces = ()
+            face_signature = None
+            angle_dispersion = None
+            volume = None
+            centroid = None
+            center_offset = None
             status = ResolutionStatus.INCOMPLETE
             diagnostics.append(Diagnostic(Severity.WARNING, GEOMETRY_DEGENERATE, str(error)))
     else:

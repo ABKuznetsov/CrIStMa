@@ -21,6 +21,8 @@ from cristma.crystal_chemistry import (
 from cristma.crystallography import SymmetryContext
 from cristma.structure import CrystalStructure, IndependentSite, SiteComponent
 from cristma.symmetry import AffineOperation
+import cristma.crystal_chemistry.polyhedra as polyhedra_module
+import cristma.crystal_chemistry.polyhedron_orbits as polyhedron_orbits_module
 
 
 def _value(value: float) -> MeasuredValue:
@@ -118,6 +120,29 @@ def test_ambiguous_shell_does_not_guess_one_polyhedron() -> None:
 
     assert result.polyhedron_orbits == ()
     assert "crystal_chemistry.polyhedron.shell_ambiguous" in result.diagnostic_codes
+
+
+def test_hull_failure_returns_incomplete_polyhedron_instead_of_raising(
+    monkeypatch,
+) -> None:
+    contact_result = _contact_result()
+
+    def fail_signature(*_args, **_kwargs):
+        raise ValueError("polyhedron face graph must be a connected closed manifold")
+
+    monkeypatch.setattr(
+        polyhedron_orbits_module, "canonical_face_signature", fail_signature
+    )
+    monkeypatch.setattr(polyhedra_module, "canonical_face_signature", fail_signature)
+
+    result = PolyhedronOrbitBuilder().build(contact_result)
+
+    assert len(result.polyhedron_orbits) == 1
+    polyhedron = result.polyhedron_orbits[0].representative
+    assert polyhedron.status is ResolutionStatus.INCOMPLETE
+    assert polyhedron.faces == ()
+    assert polyhedron.face_signature is None
+    assert "crystal_chemistry.polyhedron.geometry_degenerate" in result.diagnostic_codes
 
 
 def test_incidence_retains_every_exact_local_relation_needed_for_realization() -> None:
