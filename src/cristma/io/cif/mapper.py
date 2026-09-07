@@ -530,8 +530,6 @@ def _normalize_special_position(
     operations: tuple[AffineOperation, ...],
 ) -> tuple[IndependentSite, bool, float]:
     errors = tuple(_reported_coordinate_error(value) for value in site.fractional)
-    if max(errors) <= 1e-5:
-        return site, False, 0.0
     observed = np.asarray([float(value.value) for value in site.fractional])
     stabilizer = []
     identity = np.eye(3)
@@ -541,7 +539,7 @@ def _normalize_special_position(
         if all(
             abs(_periodic_delta(transformed[row], observed[row]))
             <= max(
-                1e-5,
+                1e-12,
                 math.nextafter(
                     math.fsum(
                         abs(rotation[row, column] - identity[row, column])
@@ -584,7 +582,7 @@ def _normalize_special_position(
         return site, False, 0.0
     adjustment = float(np.max(np.abs(normalized - observed)))
     if any(
-        abs(float(after - before)) > max(1e-5, error)
+        abs(float(after - before)) > max(1e-12, error)
         for after, before, error in zip(normalized, observed, errors, strict=True)
     ):
         return site, False, 0.0
