@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from decimal import Decimal, InvalidOperation
 import math
 import re
 
@@ -12,6 +11,7 @@ import numpy as np
 from cristma.chemistry.elements import normalize_element
 from cristma.chemistry.species import IsotopeSpecies
 from cristma.core.cell import UnitCell
+from cristma.core.precision import reported_numeric_error
 from cristma.crystallography.catalog import SpaceGroupCatalog
 from cristma.crystallography.orbit import assign_wyckoff, build_orbit
 from cristma.crystallography.space_group import SpaceGroupSetting
@@ -498,18 +498,7 @@ def _merge_coincident_sites(
 
 
 def _reported_coordinate_error(value: MeasuredValue) -> float:
-    if value.uncertainty is not None:
-        return 3.0 * float(value.uncertainty)
-    if value.raw is None:
-        return 0.0
-    numeric = value.raw.partition("(")[0]
-    try:
-        exponent = Decimal(numeric).as_tuple().exponent
-    except InvalidOperation:
-        return 0.0
-    if exponent >= 0:
-        return 0.0
-    return 0.5 * float(Decimal(10) ** exponent)
+    return reported_numeric_error(value)
 
 
 def _periodic_delta(left: float, right: float) -> float:
