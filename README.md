@@ -520,18 +520,20 @@ returns a warning instead of rejecting the complete CIF. The published
 `0.1.0b5` release introduces orbit-first direct-space crystal chemistry:
 validated symmetry contexts, asymmetric-unit pair orbits, chemical contact
 orbits, oriented incidences, and multiplicity-weighted coordination-shell
-orbits without expanded contacts in the scientific pipeline. The local
+orbits without expanded contacts in the scientific pipeline. The published
 `0.1.0b6` unifies reference-cell atom-image identities across
 `atomic_view()`, contact materialization, polyhedra, and structural units. It
 also accepts symmetry-constrained cells within their componentwise reported
 precision, collapses redundant symmetry-expanded CIF atom rows conservatively,
 and preserves incomplete polyhedra when hull geometry is unusable. The
-`0.1.0b7` development line adds orbit-first molecular bond and component
+local `0.1.0b7` development line adds orbit-first molecular bond and component
 analysis with explicit normalized-distance policy and exact periodic-rank
-classification. The implemented scientific core is covered by automated tests
-and is ready for evaluation and integration. Until the first stable release,
-public APIs may still change when required to correct or clarify scientific
-contracts.
+classification. The current `0.1.0b8` development line adds the one-call
+powder-pattern facade while retaining every intermediate reciprocal result and
+keeping instrument and phase-local sample broadening explicit. The implemented
+scientific core is covered by automated tests and is ready for evaluation and
+integration. Until the first stable release, public APIs may still change when
+required to correct or clarify scientific contracts.
 
 The current development version adds reciprocal metrics, bounded reflection
 generation, exact systematic absences, reciprocal symmetry orbits,
