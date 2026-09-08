@@ -28,6 +28,29 @@ EndpointInstance = tuple[str, str, tuple[int, int, int]]
 PairInstanceOwner = tuple[EndpointInstance, EndpointInstance]
 
 
+def canonical_undirected_relation(
+    first_id: str,
+    second_id: str,
+    relation: PeriodicSymmetryRelation,
+    first_stabilizers: tuple[PeriodicSymmetryRelation, ...],
+    second_stabilizers: tuple[PeriodicSymmetryRelation, ...],
+    context: SymmetryContext,
+) -> CanonicalPairDescriptor:
+    """Quotient an exact relation by endpoint stabilizers and reversal."""
+
+    if not first_id or not second_id:
+        raise ValueError("endpoint identities must not be empty")
+    if not first_stabilizers or not second_stabilizers:
+        raise ValueError("endpoint stabilizers must not be empty")
+    descriptors: list[CanonicalPairDescriptor] = []
+    for left in first_stabilizers:
+        for right in second_stabilizers:
+            equivalent = left.compose(relation, context).compose(right, context)
+            descriptors.append((first_id, second_id, equivalent))
+            descriptors.append((second_id, first_id, equivalent.inverse(context)))
+    return min(descriptors)
+
+
 def canonical_pair_relation(
     candidate: SymmetryPairCandidate,
     first_mapping: SiteOrbitMapping,
@@ -40,21 +63,14 @@ def canonical_pair_relation(
         raise ValueError("first pair endpoint and site mapping disagree")
     if candidate.second_site_id != second_mapping.independent_site_id:
         raise ValueError("second pair endpoint and site mapping disagree")
-    descriptors: list[CanonicalPairDescriptor] = []
-    for left in first_mapping.stabilizer_relations:
-        for right in second_mapping.stabilizer_relations:
-            relation = left.compose(candidate.relation, context).compose(right, context)
-            descriptors.append(
-                (candidate.first_site_id, candidate.second_site_id, relation)
-            )
-            descriptors.append(
-                (
-                    candidate.second_site_id,
-                    candidate.first_site_id,
-                    relation.inverse(context),
-                )
-            )
-    return min(descriptors)
+    return canonical_undirected_relation(
+        candidate.first_site_id,
+        candidate.second_site_id,
+        candidate.relation,
+        first_mapping.stabilizer_relations,
+        second_mapping.stabilizer_relations,
+        context,
+    )
 
 
 def periodic_endpoint_instance(
@@ -246,5 +262,6 @@ __all__ = [
     "build_symmetry_pair_table",
     "canonical_instance_owner",
     "canonical_pair_relation",
+    "canonical_undirected_relation",
     "periodic_endpoint_instance",
 ]
