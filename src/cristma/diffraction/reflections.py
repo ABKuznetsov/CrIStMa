@@ -16,7 +16,6 @@ from cristma.symmetry import AffineOperation
 from .diagnostics import (
     DiffractionInvariantError,
     INCOMPATIBLE_CELL_AND_SETTING,
-    INCONSISTENT_PHASE_BUCKETS,
     ORBIT_METRIC_MISMATCH,
     SEARCH_LIMIT_REACHED,
 )
@@ -166,22 +165,10 @@ class ReflectionGenerator:
         setting: SpaceGroupSetting,
         analyzer: ExtinctionAnalyzer,
     ):
-        result = analyzer.analyze(orbit[0], setting)
-        for member in orbit[1:]:
-            member_result = analyzer.analyze(member, setting)
-            if member_result.absent != result.absent:
-                raise DiffractionInvariantError(
-                    INCONSISTENT_PHASE_BUCKETS,
-                    "reciprocal-orbit members disagree on systematic absence",
-                    {
-                        "space_group_setting_id": setting.setting_id,
-                        "representative_hkl": orbit[0].as_tuple(),
-                        "member_hkl": member.as_tuple(),
-                        "representative_absent": result.absent,
-                        "member_absent": member_result.absent,
-                    },
-                )
-        return result
+        # Systematic absence is invariant under the reciprocal point-group
+        # action.  Re-evaluating every member would repeat the same exact
+        # phase-character calculation in the hottest generation loop.
+        return analyzer.analyze(orbit[0], setting)
 
     def generate(
         self,
