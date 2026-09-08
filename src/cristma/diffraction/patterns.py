@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 from numbers import Real
 
@@ -71,6 +71,51 @@ class PowderPatternCalculator:
     profile_calculator: PowderProfileCalculator = field(
         default_factory=PowderProfileCalculator
     )
+
+    def __post_init__(self) -> None:
+        for value, expected, name in (
+            (
+                self.reflection_generator,
+                ReflectionGenerator,
+                "reflection_generator",
+            ),
+            (
+                self.structure_factor_calculator,
+                StructureFactorCalculator,
+                "structure_factor_calculator",
+            ),
+            (
+                self.profile_calculator,
+                PowderProfileCalculator,
+                "profile_calculator",
+            ),
+        ):
+            if not isinstance(value, expected):
+                raise TypeError(f"{name} must be {expected.__name__}")
+
+    def get_config(self) -> dict[str, tuple[tuple[str, object], ...]]:
+        return {
+            "reflection_generator": tuple(
+                sorted(self.reflection_generator.get_config().items())
+            ),
+            "structure_factor_calculator": tuple(
+                sorted(self.structure_factor_calculator.get_config().items())
+            ),
+            "profile_calculator": tuple(
+                sorted(self.profile_calculator.get_config().items())
+            ),
+        }
+
+    def clone(self, **changes: object) -> "PowderPatternCalculator":
+        allowed = {
+            "reflection_generator",
+            "structure_factor_calculator",
+            "profile_calculator",
+        }
+        unknown = set(changes) - allowed
+        if unknown:
+            raise TypeError(f"unknown configuration field: {sorted(unknown)[0]}")
+        return replace(self, **changes)
 
     def calculate(
         self,
