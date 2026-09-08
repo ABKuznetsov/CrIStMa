@@ -448,6 +448,41 @@ Each call describes one phase. Size is an isotropic Lorentzian Scherrer
 contribution, while microstrain is an isotropic Gaussian
 `4 * microstrain * tan(theta)` contribution. They are combined with the
 explicit instrument components before the TCH pseudo-Voigt approximation.
+
+The same forward calculation is available through one small facade when the
+intermediate results are still required for inspection:
+
+```python
+from cristma.diffraction import (
+    BraggBrentanoGeometry,
+    ConstantWidthProfile,
+    IsotropicSampleBroadening,
+    PowderPatternCalculator,
+    RadiationSpectrum,
+    UniformTwoThetaGrid,
+)
+
+pattern = PowderPatternCalculator().calculate(
+    crystal,
+    setting,
+    RadiationSpectrum.lab_k_alpha("Cu"),
+    UniformTwoThetaGrid(5.0, 90.0, 0.02),
+    ConstantWidthProfile(0.10),
+    geometry=BraggBrentanoGeometry(),
+    sample_broadening=IsotropicSampleBroadening(
+        crystallite_size_nm=80.0,
+        microstrain=8.0e-4,
+    ),
+)
+```
+
+The facade derives reciprocal coverage from the upper grid boundary and the
+shortest selected wavelength, then retains its `ReflectionSet`,
+`StructureFactorSet`, intrinsic lines, optional corrected lines, sampled
+profile, status, and provenance. Instrument broadening remains mandatory and
+explicit; sample broadening belongs only to the phase calculated by that call.
+The facade does not read experimental patterns, compare phases, or refine any
+parameter.
 Every radiation component uses its own wavelength, including K-alpha
 doublets. If the consuming application has no instrument calibration, the
 same sample model can be combined with `ConstantWidthProfile`; CrIStMa never
