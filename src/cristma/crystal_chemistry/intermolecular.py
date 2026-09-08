@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
+
+import numpy as np
 
 from cristma.crystallography import (
     PairTableStatus,
@@ -22,6 +24,7 @@ from .intermolecular_models import (
     IntermolecularContactAnalysisResult,
     IntermolecularContactOrbit,
     IntermolecularContactPolicy,
+    HydrogenBondCandidate,
     VanDerWaalsDistanceEvidence,
 )
 from .models import ResolutionStatus
@@ -184,6 +187,179 @@ def _same_molecule_instance(
     return actual == identity
 
 
+def _relation_vector(
+    first_site,
+    second_site,
+    relation: PeriodicSymmetryRelation,
+    contact_analysis: ContactAnalysisResult,
+) -> tuple[float, tuple[float, float, float]]:
+    context = contact_analysis._symmetry_context
+    operation = context.operation_by_key(relation.operation_key)
+    first = np.asarray(tuple(float(item.value) for item in first_site.fractional))
+    second = tuple(float(item.value) for item in second_site.fractional)
+    transformed = np.asarray(tuple(
+        math.fsum(
+            float(coefficient) * coordinate
+            for coefficient, coordinate in zip(row, second, strict=True)
+        )
+        + float(offset)
+        + relation.lattice_translation[index]
+        for index, (row, offset) in enumerate(
+            zip(operation.rotation, operation.translation, strict=True)
+        )
+    ))
+    vector = (transformed - first) @ contact_analysis._structure.cell.matrix
+    return float(np.linalg.norm(vector)), tuple(float(value) for value in vector)
+
+
+def _hydrogen_bond_candidates(
+    orbit: IntermolecularContactOrbit,
+    geometry,
+    contact_analysis: ContactAnalysisResult,
+    molecular_analysis: MolecularAnalysisResult,
+    policy: IntermolecularContactPolicy,
+) -> tuple[HydrogenBondCandidate, ...]:
+    sites = {site.id: site for site in contact_analysis._structure.sites}
+    first_site = sites[geometry.first_independent_site_id]
+    second_site = sites[geometry.second_independent_site_id]
+    first_has_h = any(component.element == "H" for component in first_site.components)
+    second_has_h = any(component.element == "H" for component in second_site.components)
+    if first_has_h == second_has_h:
+        return ()
+    if first_has_h:
+        hydrogen_id = geometry.first_independent_site_id
+        acceptor_id = geometry.second_independent_site_id
+        hydrogen_acceptor_relation = geometry.canonical_relation
+        qualifying_evidence = tuple(
+            item
+            for item in orbit.component_pair_evidence
+            if item.first_element == "H"
+            and item.second_element in policy.hydrogen_acceptor_elements
+            and item.vdw_gap is not None
+            and item.vdw_gap <= policy.hydrogen_acceptor_gap_angstrom
+        )
+    else:
+        hydrogen_id = geometry.second_independent_site_id
+        acceptor_id = geometry.first_independent_site_id
+        hydrogen_acceptor_relation = geometry.canonical_relation.inverse(
+            contact_analysis._symmetry_context
+        )
+        qualifying_evidence = tuple(
+            item
+            for item in orbit.component_pair_evidence
+            if item.second_element == "H"
+            and item.first_element in policy.hydrogen_acceptor_elements
+            and item.vdw_gap is not None
+            and item.vdw_gap <= policy.hydrogen_acceptor_gap_angstrom
+        )
+    if not qualifying_evidence:
+        return ()
+    acceptor_site = sites[acceptor_id]
+    accepted_acceptors = {
+        component.element
+        for component in acceptor_site.components
+        if component.element in policy.hydrogen_acceptor_elements
+    }
+    if not accepted_acceptors:
+        return ()
+
+    candidates: list[HydrogenBondCandidate] = []
+    context = contact_analysis._symmetry_context
+    for bond in molecular_analysis.bond_orbits:
+        if hydrogen_id not in (
+            bond.first_independent_site_id,
+            bond.second_independent_site_id,
+        ):
+            continue
+        if hydrogen_id == bond.second_independent_site_id:
+            donor_id = bond.first_independent_site_id
+            donor_hydrogen_relation = bond.periodic_relation
+        else:
+            donor_id = bond.second_independent_site_id
+            donor_hydrogen_relation = bond.periodic_relation.inverse(context)
+        donor_site = sites[donor_id]
+        accepted_donors = {
+            component.element
+            for component in donor_site.components
+            if component.element in policy.hydrogen_donor_elements
+        }
+        accepted_pairs = tuple(sorted(
+            (donor, acceptor)
+            for donor in accepted_donors
+            for acceptor in accepted_acceptors
+        ))
+        if not accepted_pairs:
+            continue
+        _, hydrogen_to_donor = _relation_vector(
+            sites[hydrogen_id],
+            donor_site,
+            donor_hydrogen_relation.inverse(context),
+            contact_analysis,
+        )
+        hydrogen_acceptor_distance, hydrogen_to_acceptor = _relation_vector(
+            sites[hydrogen_id],
+            acceptor_site,
+            hydrogen_acceptor_relation,
+            contact_analysis,
+        )
+        denominator = float(
+            np.linalg.norm(hydrogen_to_donor) * np.linalg.norm(hydrogen_to_acceptor)
+        )
+        if denominator <= 0.0:
+            continue
+        cosine = float(
+            np.dot(hydrogen_to_donor, hydrogen_to_acceptor) / denominator
+        )
+        angle = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+        if angle < policy.minimum_donor_hydrogen_acceptor_angle_deg:
+            continue
+        donor_acceptor_relation = donor_hydrogen_relation.compose(
+            hydrogen_acceptor_relation,
+            context,
+        )
+        donor_acceptor_distance, _ = _relation_vector(
+            donor_site,
+            acceptor_site,
+            donor_acceptor_relation,
+            contact_analysis,
+        )
+        interpretation_id = "hydrogen-bond-candidate:" + _digest({
+            "intermolecular_contact_orbit_id": orbit.intermolecular_contact_orbit_id,
+            "donor_hydrogen_bond_orbit_id": bond.bond_orbit_id,
+            "donor_site_id": donor_id,
+            "hydrogen_site_id": hydrogen_id,
+            "acceptor_site_id": acceptor_id,
+            "donor_hydrogen_relation": (
+                donor_hydrogen_relation.operation_key,
+                donor_hydrogen_relation.lattice_translation,
+            ),
+            "hydrogen_acceptor_relation": (
+                hydrogen_acceptor_relation.operation_key,
+                hydrogen_acceptor_relation.lattice_translation,
+            ),
+        })
+        candidates.append(HydrogenBondCandidate(
+            interpretation_id,
+            donor_id,
+            hydrogen_id,
+            acceptor_id,
+            bond.bond_orbit_id,
+            hydrogen_acceptor_distance,
+            donor_acceptor_distance,
+            angle,
+            donor_hydrogen_relation,
+            hydrogen_acceptor_relation,
+            accepted_pairs,
+            ResolutionStatus.RESOLVED,
+            (),
+            (
+                ("method", "cristma.hydrogen_bond_candidate:1"),
+                ("criterion", "explicit_D-H...A_geometry"),
+            ),
+        ))
+    return tuple(sorted(candidates, key=lambda item: item.interpretation_id))
+
+
 @dataclass(frozen=True, slots=True)
 class IntermolecularContactAnalyzer:
     """Resolve geometric contacts from one existing symmetry pair table."""
@@ -225,7 +401,20 @@ class IntermolecularContactAnalyzer:
                     raise ValueError("a molecular site belongs to multiple molecule orbits")
                 site_to_molecule[site_id] = molecule
 
+        structure_sites = {site.id: site for site in contact_analysis._structure.sites}
         diagnostics: list[Diagnostic] = []
+        has_explicit_hydrogen = any(
+            component.element == "H"
+            for molecule in discrete
+            for site_id in molecule.independent_site_ids
+            for component in structure_sites[site_id].components
+        )
+        if discrete and not has_explicit_hydrogen:
+            diagnostics.append(Diagnostic(
+                Severity.INFO,
+                "crystal_chemistry.intermolecular.explicit_hydrogen_absent",
+                "Hydrogen-bond candidates were not evaluated because no explicit H/D site is present",
+            ))
         cutoff_incomplete = (
             contact_analysis.pair_table.cutoff + contact_analysis.pair_table.distance_tolerance
             < self.policy.maximum_distance_angstrom
@@ -237,7 +426,6 @@ class IntermolecularContactAnalyzer:
                 "The existing symmetry pair table does not cover the requested intermolecular distance",
                 recovery="recalculate contact analysis with a sufficient minimum_pair_cutoff",
             ))
-        structure_sites = {site.id: site for site in contact_analysis._structure.sites}
         vdw_records = reference.vdw_radii.records
         vdw_dataset_id = vdw_records[0].dataset_id if vdw_records else "not_available"
         vdw_dataset_version = (
@@ -312,7 +500,7 @@ class IntermolecularContactAnalyzer:
                 "lattice_translation": descriptor[2].lattice_translation,
                 "geometry_orbit_id": geometry.geometry_orbit_id,
             })
-            output.append(IntermolecularContactOrbit(
+            contact_orbit = IntermolecularContactOrbit(
                 contact_id,
                 geometry.geometry_orbit_id,
                 descriptor[0],
@@ -336,7 +524,15 @@ class IntermolecularContactAnalyzer:
                     ("vdw_dataset_id", vdw_dataset_id),
                     ("vdw_dataset_version", vdw_dataset_version),
                 ),
-            ))
+            )
+            interpretations = _hydrogen_bond_candidates(
+                contact_orbit,
+                geometry,
+                contact_analysis,
+                molecular_analysis,
+                self.policy,
+            )
+            output.append(replace(contact_orbit, interpretations=interpretations))
 
         ordered = tuple(sorted(output, key=lambda item: item.intermolecular_contact_orbit_id))
         statuses = tuple(item.status for item in ordered)
