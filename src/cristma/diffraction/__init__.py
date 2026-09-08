@@ -43,6 +43,7 @@ from .profile_models import (
     UniformTwoThetaGrid,
 )
 from .profiles import PowderProfileCalculator, PowderProfileLimitError
+from .patterns import PowderPatternCalculator
 from .pattern_models import PowderPatternProvenance, PowderPatternResult
 from .reciprocal import ReciprocalMetric
 from .reflections import ReflectionGenerator
@@ -72,6 +73,7 @@ __all__ = [
     "PowderLineCalculator",
     "PowderLineProvenance",
     "PowderLineSet",
+    "PowderPatternCalculator",
     "PowderPatternProvenance",
     "PowderPatternResult",
     "PowderProfileCalculator",
