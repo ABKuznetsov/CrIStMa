@@ -1,0 +1,426 @@
+{
+  "metadata": {
+    "dataset_id": "cristma.vdw_radii.pymatgen_crc_2024",
+    "version": "1",
+    "source_repository": "https://github.com/materialsproject/pymatgen",
+    "source_commit": "8495e941504cd5123701635b6572942c78d9589c",
+    "source_data_repository": "https://github.com/materialsproject/pymatgen-core",
+    "source_data_commit": "bc7b4d571bbc797d3e5b7edc8efdd4834676cc4c",
+    "source_path": "src/pymatgen/core/periodic_table.json.gz",
+    "source_sha256": "b11669f8ccb0a9fe7647d9026ecbd30ee15ded7c464df828820a15768556d0aa",
+    "source_license": "MIT",
+    "scientific_source": "CRC Handbook of Chemistry and Physics, 105th edition (2024)",
+    "unit": "angstrom",
+    "record_count": 102
+  },
+  "records": [
+    {
+      "symbol": "H",
+      "value_angstrom": 1.1
+    },
+    {
+      "symbol": "He",
+      "value_angstrom": 1.4
+    },
+    {
+      "symbol": "Li",
+      "value_angstrom": 1.82
+    },
+    {
+      "symbol": "Be",
+      "value_angstrom": 1.53
+    },
+    {
+      "symbol": "B",
+      "value_angstrom": 1.92
+    },
+    {
+      "symbol": "C",
+      "value_angstrom": 1.7
+    },
+    {
+      "symbol": "N",
+      "value_angstrom": 1.55
+    },
+    {
+      "symbol": "O",
+      "value_angstrom": 1.52
+    },
+    {
+      "symbol": "F",
+      "value_angstrom": 1.47
+    },
+    {
+      "symbol": "Ne",
+      "value_angstrom": 1.54
+    },
+    {
+      "symbol": "Na",
+      "value_angstrom": 2.27
+    },
+    {
+      "symbol": "Mg",
+      "value_angstrom": 1.73
+    },
+    {
+      "symbol": "Al",
+      "value_angstrom": 1.84
+    },
+    {
+      "symbol": "Si",
+      "value_angstrom": 2.1
+    },
+    {
+      "symbol": "P",
+      "value_angstrom": 1.8
+    },
+    {
+      "symbol": "S",
+      "value_angstrom": 1.8
+    },
+    {
+      "symbol": "Cl",
+      "value_angstrom": 1.75
+    },
+    {
+      "symbol": "Ar",
+      "value_angstrom": 1.88
+    },
+    {
+      "symbol": "K",
+      "value_angstrom": 2.75
+    },
+    {
+      "symbol": "Ca",
+      "value_angstrom": 2.31
+    },
+    {
+      "symbol": "Sc",
+      "value_angstrom": 2.15
+    },
+    {
+      "symbol": "Ti",
+      "value_angstrom": 2.11
+    },
+    {
+      "symbol": "V",
+      "value_angstrom": 2.07
+    },
+    {
+      "symbol": "Cr",
+      "value_angstrom": 2.06
+    },
+    {
+      "symbol": "Mn",
+      "value_angstrom": 2.05
+    },
+    {
+      "symbol": "Fe",
+      "value_angstrom": 2.04
+    },
+    {
+      "symbol": "Co",
+      "value_angstrom": 2.0
+    },
+    {
+      "symbol": "Ni",
+      "value_angstrom": 1.97
+    },
+    {
+      "symbol": "Cu",
+      "value_angstrom": 1.96
+    },
+    {
+      "symbol": "Zn",
+      "value_angstrom": 2.01
+    },
+    {
+      "symbol": "Ga",
+      "value_angstrom": 1.87
+    },
+    {
+      "symbol": "Ge",
+      "value_angstrom": 2.11
+    },
+    {
+      "symbol": "As",
+      "value_angstrom": 1.85
+    },
+    {
+      "symbol": "Se",
+      "value_angstrom": 1.9
+    },
+    {
+      "symbol": "Br",
+      "value_angstrom": 1.85
+    },
+    {
+      "symbol": "Kr",
+      "value_angstrom": 2.02
+    },
+    {
+      "symbol": "Rb",
+      "value_angstrom": 3.03
+    },
+    {
+      "symbol": "Sr",
+      "value_angstrom": 2.49
+    },
+    {
+      "symbol": "Y",
+      "value_angstrom": 2.32
+    },
+    {
+      "symbol": "Zr",
+      "value_angstrom": 2.23
+    },
+    {
+      "symbol": "Nb",
+      "value_angstrom": 2.18
+    },
+    {
+      "symbol": "Mo",
+      "value_angstrom": 2.17
+    },
+    {
+      "symbol": "Tc",
+      "value_angstrom": 2.16
+    },
+    {
+      "symbol": "Ru",
+      "value_angstrom": 2.13
+    },
+    {
+      "symbol": "Rh",
+      "value_angstrom": 2.1
+    },
+    {
+      "symbol": "Pd",
+      "value_angstrom": 2.1
+    },
+    {
+      "symbol": "Ag",
+      "value_angstrom": 2.11
+    },
+    {
+      "symbol": "Cd",
+      "value_angstrom": 2.18
+    },
+    {
+      "symbol": "In",
+      "value_angstrom": 1.93
+    },
+    {
+      "symbol": "Sn",
+      "value_angstrom": 2.17
+    },
+    {
+      "symbol": "Sb",
+      "value_angstrom": 2.06
+    },
+    {
+      "symbol": "Te",
+      "value_angstrom": 2.06
+    },
+    {
+      "symbol": "I",
+      "value_angstrom": 1.98
+    },
+    {
+      "symbol": "Xe",
+      "value_angstrom": 2.16
+    },
+    {
+      "symbol": "Cs",
+      "value_angstrom": 3.43
+    },
+    {
+      "symbol": "Ba",
+      "value_angstrom": 2.68
+    },
+    {
+      "symbol": "La",
+      "value_angstrom": 2.43
+    },
+    {
+      "symbol": "Ce",
+      "value_angstrom": 2.42
+    },
+    {
+      "symbol": "Pr",
+      "value_angstrom": 2.4
+    },
+    {
+      "symbol": "Nd",
+      "value_angstrom": 2.39
+    },
+    {
+      "symbol": "Pm",
+      "value_angstrom": 2.38
+    },
+    {
+      "symbol": "Sm",
+      "value_angstrom": 2.36
+    },
+    {
+      "symbol": "Eu",
+      "value_angstrom": 2.35
+    },
+    {
+      "symbol": "Gd",
+      "value_angstrom": 2.34
+    },
+    {
+      "symbol": "Tb",
+      "value_angstrom": 2.33
+    },
+    {
+      "symbol": "Dy",
+      "value_angstrom": 2.31
+    },
+    {
+      "symbol": "Ho",
+      "value_angstrom": 2.3
+    },
+    {
+      "symbol": "Er",
+      "value_angstrom": 2.29
+    },
+    {
+      "symbol": "Tm",
+      "value_angstrom": 2.27
+    },
+    {
+      "symbol": "Yb",
+      "value_angstrom": 2.26
+    },
+    {
+      "symbol": "Lu",
+      "value_angstrom": 2.24
+    },
+    {
+      "symbol": "Hf",
+      "value_angstrom": 2.23
+    },
+    {
+      "symbol": "Ta",
+      "value_angstrom": 2.22
+    },
+    {
+      "symbol": "W",
+      "value_angstrom": 2.18
+    },
+    {
+      "symbol": "Re",
+      "value_angstrom": 2.16
+    },
+    {
+      "symbol": "Os",
+      "value_angstrom": 2.16
+    },
+    {
+      "symbol": "Ir",
+      "value_angstrom": 2.13
+    },
+    {
+      "symbol": "Pt",
+      "value_angstrom": 2.13
+    },
+    {
+      "symbol": "Au",
+      "value_angstrom": 2.14
+    },
+    {
+      "symbol": "Hg",
+      "value_angstrom": 2.23
+    },
+    {
+      "symbol": "Tl",
+      "value_angstrom": 1.96
+    },
+    {
+      "symbol": "Pb",
+      "value_angstrom": 2.02
+    },
+    {
+      "symbol": "Bi",
+      "value_angstrom": 2.07
+    },
+    {
+      "symbol": "Po",
+      "value_angstrom": 1.97
+    },
+    {
+      "symbol": "At",
+      "value_angstrom": 2.02
+    },
+    {
+      "symbol": "Rn",
+      "value_angstrom": 2.2
+    },
+    {
+      "symbol": "Fr",
+      "value_angstrom": 3.48
+    },
+    {
+      "symbol": "Ra",
+      "value_angstrom": 2.83
+    },
+    {
+      "symbol": "Ac",
+      "value_angstrom": 2.47
+    },
+    {
+      "symbol": "Th",
+      "value_angstrom": 2.45
+    },
+    {
+      "symbol": "Pa",
+      "value_angstrom": 2.43
+    },
+    {
+      "symbol": "U",
+      "value_angstrom": 2.41
+    },
+    {
+      "symbol": "Np",
+      "value_angstrom": 2.39
+    },
+    {
+      "symbol": "Pu",
+      "value_angstrom": 2.43
+    },
+    {
+      "symbol": "Am",
+      "value_angstrom": 2.44
+    },
+    {
+      "symbol": "Cm",
+      "value_angstrom": 2.45
+    },
+    {
+      "symbol": "Bk",
+      "value_angstrom": 2.44
+    },
+    {
+      "symbol": "Cf",
+      "value_angstrom": 2.45
+    },
+    {
+      "symbol": "Es",
+      "value_angstrom": 2.45
+    },
+    {
+      "symbol": "Fm",
+      "value_angstrom": 2.45
+    },
+    {
+      "symbol": "Md",
+      "value_angstrom": 2.46
+    },
+    {
+      "symbol": "No",
+      "value_angstrom": 2.46
+    }
+  ]
+}
