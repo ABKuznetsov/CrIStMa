@@ -8,6 +8,7 @@ import math
 
 import numpy as np
 
+from cristma.chemistry import DecompositionMode
 from cristma.crystallography import (
     PairTableStatus,
     PeriodicSymmetryRelation,
@@ -393,6 +394,25 @@ class IntermolecularContactAnalyzer:
             for bond in molecular_analysis.bond_orbits
         ):
             raise ValueError("molecular analysis belongs to another pair table")
+        if contact_analysis.grammar.mode is not DecompositionMode.MOLECULAR_COMPONENTS:
+            diagnostic = Diagnostic(
+                Severity.INFO,
+                "crystal_chemistry.intermolecular.not_discrete_molecular_domain",
+                "Ordinary molecular packing is not applicable to this composition grammar",
+            )
+            return IntermolecularContactAnalysisResult(
+                contact_analysis,
+                molecular_analysis,
+                (),
+                ResolutionStatus.NOT_APPLICABLE,
+                (diagnostic,),
+                tuple(sorted(self.policy.get_config())),
+                tuple(sorted((
+                    ("method", "cristma.intermolecular_contact_analysis:1"),
+                    ("pair_table_cutoff", contact_analysis.pair_table.cutoff),
+                    ("symmetry_context_fingerprint", context.fingerprint),
+                ))),
+            )
         discrete = molecular_analysis.molecule_orbits
         site_to_molecule: dict[str, MolecularComponentOrbit] = {}
         for molecule in discrete:

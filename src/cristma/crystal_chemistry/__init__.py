@@ -1,4 +1,4 @@
-"""Reusable inorganic crystal-chemistry calculations and results."""
+"""Reusable orbit-first crystal-chemistry calculations and results."""
 
 from .models import (
     ComponentPairInterpretation,
@@ -41,9 +41,19 @@ from .polyhedron_orbits import PolyhedronOrbitBuildResult, PolyhedronOrbitBuilde
 from .materialization import (
     CellRange,
     ContactMaterializer,
+    IntermolecularContactMaterializer,
     ReferenceCell,
     ResolvedContact,
     ShellMembership,
+)
+from .intermolecular import IntermolecularContactAnalyzer
+from .intermolecular_models import (
+    HydrogenBondCandidate,
+    IntermolecularContactAnalysisResult,
+    IntermolecularContactOrbit,
+    IntermolecularContactPolicy,
+    MaterializedIntermolecularContact,
+    VanDerWaalsDistanceEvidence,
 )
 from .shannon_distance import ShannonDistanceCheck, ShannonDistanceValidator
 from .structural_units import (
@@ -99,6 +109,12 @@ __all__ = [
     "ComponentPairInterpretation",
     "CellRange",
     "ContactMaterializer",
+    "HydrogenBondCandidate",
+    "IntermolecularContactAnalysisResult",
+    "IntermolecularContactAnalyzer",
+    "IntermolecularContactMaterializer",
+    "IntermolecularContactOrbit",
+    "IntermolecularContactPolicy",
     "ContactInterpretation",
     "ContactIncidenceBuilder",
     "ContactIncidenceOrbit",
@@ -112,6 +128,7 @@ __all__ = [
     "MolecularBondOrbit",
     "MolecularComponentKind",
     "MolecularComponentOrbit",
+    "MaterializedIntermolecularContact",
     "CoordinationShellAlternative",
     "CoordinationShellOrbit",
     "CoordinationShellOrbitResolver",
@@ -166,5 +183,6 @@ __all__ = [
     "polyhedron_face_signature",
     "canonical_face_signature",
     "unique_hull_edges",
+    "VanDerWaalsDistanceEvidence",
     "aggregate_contact_analysis_status",
 ]
