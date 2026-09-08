@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import math
+from typing import TYPE_CHECKING
 
 from cristma.chemistry.elements import normalize_element
 from cristma.crystallography import PeriodicSymmetryRelation
@@ -11,6 +12,10 @@ from cristma.diagnostics import Diagnostic
 from cristma.structure import PeriodicAtomRef
 
 from .models import ResolutionStatus
+
+if TYPE_CHECKING:
+    from .contact_analysis import ContactAnalysisResult
+    from .molecular import MolecularAnalysisResult
 
 
 def _finite_number(value: object, name: str) -> float:
@@ -349,8 +354,40 @@ class MaterializedIntermolecularContact:
             raise ValueError("materialized contact interpretations must be unique and sorted")
 
 
+@dataclass(frozen=True, slots=True)
+class IntermolecularContactAnalysisResult:
+    """Primary immutable result for contacts between discrete molecule orbits."""
+
+    _contact_analysis: "ContactAnalysisResult" = field(repr=False, compare=False)
+    _molecular_analysis: "MolecularAnalysisResult" = field(repr=False, compare=False)
+    contact_orbits: tuple[IntermolecularContactOrbit, ...]
+    status: ResolutionStatus
+    diagnostics: tuple[Diagnostic, ...]
+    configuration: tuple[tuple[str, object], ...]
+    provenance: tuple[tuple[str, object], ...]
+
+    def __post_init__(self) -> None:
+        identifiers = tuple(
+            item.intermolecular_contact_orbit_id for item in self.contact_orbits
+        )
+        if identifiers != tuple(sorted(set(identifiers))):
+            raise ValueError("intermolecular contact-orbit IDs must be unique and sorted")
+        if any(
+            item.status is ResolutionStatus.INCOMPLETE
+            for item in self.contact_orbits
+        ) and self.status is not ResolutionStatus.INCOMPLETE:
+            raise ValueError("incomplete contact orbit must propagate to result status")
+        configuration_keys = tuple(key for key, _ in self.configuration)
+        if configuration_keys != tuple(sorted(set(configuration_keys))):
+            raise ValueError("intermolecular configuration keys must be unique and sorted")
+        provenance_keys = tuple(key for key, _ in self.provenance)
+        if provenance_keys != tuple(sorted(set(provenance_keys))):
+            raise ValueError("intermolecular provenance keys must be unique and sorted")
+
+
 __all__ = [
     "HydrogenBondCandidate",
+    "IntermolecularContactAnalysisResult",
     "IntermolecularContactOrbit",
     "IntermolecularContactPolicy",
     "MaterializedIntermolecularContact",

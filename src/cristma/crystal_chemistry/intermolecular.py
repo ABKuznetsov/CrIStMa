@@ -3,11 +3,33 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
+import math
 
-from cristma.crystallography import PeriodicSymmetryRelation, SymmetryContext, identity_relation
+from cristma.crystallography import (
+    PairTableStatus,
+    PeriodicSymmetryRelation,
+    SymmetryContext,
+    identity_relation,
+)
 from cristma.crystallography.pair_canonical import canonical_undirected_relation
+from cristma.crystallography.symmetry_context import _digest
+from cristma.diagnostics import Diagnostic, Severity
+from cristma.reference_data import ReferenceData
 
-from .molecular import MolecularComponentKind, MolecularComponentOrbit
+from .contact_analysis import ContactAnalysisResult
+from .intermolecular_models import (
+    IntermolecularContactAnalysisResult,
+    IntermolecularContactOrbit,
+    IntermolecularContactPolicy,
+    VanDerWaalsDistanceEvidence,
+)
+from .models import ResolutionStatus
+from .molecular import (
+    MolecularAnalysisResult,
+    MolecularComponentKind,
+    MolecularComponentOrbit,
+)
 
 
 MoleculeContactDescriptor = tuple[str, str, PeriodicSymmetryRelation]
@@ -83,8 +105,272 @@ def canonical_molecule_contact_relation(
     )
 
 
+def _vdw_evidence(
+    first_site,
+    second_site,
+    distance: float,
+    reference: ReferenceData,
+) -> tuple[tuple[VanDerWaalsDistanceEvidence, ...], tuple[Diagnostic, ...]]:
+    evidence: list[VanDerWaalsDistanceEvidence] = []
+    diagnostics: list[Diagnostic] = []
+    for first_component in first_site.components:
+        for second_component in second_site.components:
+            if first_component.element is None or second_component.element is None:
+                diagnostics.append(Diagnostic(
+                    Severity.WARNING,
+                    "crystal_chemistry.intermolecular.unknown_component_element",
+                    "An intermolecular component has no resolvable parent element",
+                ))
+                continue
+            first_element = first_component.element
+            second_element = second_component.element
+            first_occupancy = float(first_component.occupancy.value)
+            second_occupancy = float(second_component.occupancy.value)
+            try:
+                first_radius = reference.vdw_radii.find(first_element).value_angstrom
+                second_radius = reference.vdw_radii.find(second_element).value_angstrom
+            except KeyError:
+                evidence.append(VanDerWaalsDistanceEvidence(
+                    first_element,
+                    second_element,
+                    first_occupancy,
+                    second_occupancy,
+                    None,
+                    None,
+                    None,
+                    ResolutionStatus.INCOMPLETE,
+                ))
+                diagnostics.append(Diagnostic(
+                    Severity.WARNING,
+                    "crystal_chemistry.intermolecular.vdw_radius_missing",
+                    f"No van der Waals radius is available for {first_element}-{second_element}",
+                ))
+                continue
+            radius_sum = first_radius + second_radius
+            evidence.append(VanDerWaalsDistanceEvidence(
+                first_element,
+                second_element,
+                first_occupancy,
+                second_occupancy,
+                radius_sum,
+                distance - radius_sum,
+                distance / radius_sum,
+                ResolutionStatus.RESOLVED,
+            ))
+    evidence.sort(key=lambda item: (
+        item.first_element,
+        item.second_element,
+        item.first_occupancy,
+        item.second_occupancy,
+    ))
+    return tuple(evidence), tuple(dict.fromkeys(diagnostics))
+
+
+def _same_molecule_instance(
+    first: MolecularComponentOrbit,
+    second: MolecularComponentOrbit,
+    relation: PeriodicSymmetryRelation,
+    context: SymmetryContext,
+) -> bool:
+    if first.component_orbit_id != second.component_orbit_id:
+        return False
+    actual = canonical_molecule_contact_relation(first, second, relation, context)
+    identity = canonical_molecule_contact_relation(
+        first,
+        second,
+        identity_relation(context),
+        context,
+    )
+    return actual == identity
+
+
+@dataclass(frozen=True, slots=True)
+class IntermolecularContactAnalyzer:
+    """Resolve geometric contacts from one existing symmetry pair table."""
+
+    policy: IntermolecularContactPolicy
+    reference: ReferenceData | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.policy, IntermolecularContactPolicy):
+            raise TypeError("policy must be IntermolecularContactPolicy")
+        if self.reference is not None and not isinstance(self.reference, ReferenceData):
+            raise TypeError("reference must be ReferenceData or None")
+
+    def analyze(
+        self,
+        contact_analysis: ContactAnalysisResult,
+        molecular_analysis: MolecularAnalysisResult,
+    ) -> IntermolecularContactAnalysisResult:
+        if not isinstance(contact_analysis, ContactAnalysisResult):
+            raise TypeError("contact_analysis must be ContactAnalysisResult")
+        if not isinstance(molecular_analysis, MolecularAnalysisResult):
+            raise TypeError("molecular_analysis must be MolecularAnalysisResult")
+        reference = self.reference or ReferenceData.default()
+        context = contact_analysis._symmetry_context
+        geometry_by_id = {
+            item.geometry_orbit_id: item
+            for item in contact_analysis.pair_table.contact_orbits
+        }
+        if any(
+            bond.geometry_orbit_id not in geometry_by_id
+            for bond in molecular_analysis.bond_orbits
+        ):
+            raise ValueError("molecular analysis belongs to another pair table")
+        discrete = molecular_analysis.molecule_orbits
+        site_to_molecule: dict[str, MolecularComponentOrbit] = {}
+        for molecule in discrete:
+            for site_id in molecule.independent_site_ids:
+                if site_id in site_to_molecule:
+                    raise ValueError("a molecular site belongs to multiple molecule orbits")
+                site_to_molecule[site_id] = molecule
+
+        diagnostics: list[Diagnostic] = []
+        cutoff_incomplete = (
+            contact_analysis.pair_table.cutoff + contact_analysis.pair_table.distance_tolerance
+            < self.policy.maximum_distance_angstrom
+        )
+        if cutoff_incomplete:
+            diagnostics.append(Diagnostic(
+                Severity.WARNING,
+                "crystal_chemistry.intermolecular.pair_cutoff_incomplete",
+                "The existing symmetry pair table does not cover the requested intermolecular distance",
+                recovery="recalculate contact analysis with a sufficient minimum_pair_cutoff",
+            ))
+        structure_sites = {site.id: site for site in contact_analysis._structure.sites}
+        vdw_records = reference.vdw_radii.records
+        vdw_dataset_id = vdw_records[0].dataset_id if vdw_records else "not_available"
+        vdw_dataset_version = (
+            vdw_records[0].dataset_version if vdw_records else "not_available"
+        )
+        output: list[IntermolecularContactOrbit] = []
+        for geometry in contact_analysis.pair_table.contact_orbits:
+            if geometry.representative_distance > (
+                self.policy.maximum_distance_angstrom
+                + contact_analysis.pair_table.distance_tolerance
+            ):
+                continue
+            first_molecule = site_to_molecule.get(geometry.first_independent_site_id)
+            second_molecule = site_to_molecule.get(geometry.second_independent_site_id)
+            if first_molecule is None or second_molecule is None:
+                continue
+            molecule_relation = molecule_relation_for_atomic_pair(
+                first_molecule,
+                second_molecule,
+                geometry.first_independent_site_id,
+                geometry.second_independent_site_id,
+                geometry.canonical_relation,
+                context,
+            )
+            if _same_molecule_instance(
+                first_molecule,
+                second_molecule,
+                molecule_relation,
+                context,
+            ):
+                continue
+            descriptor = canonical_molecule_contact_relation(
+                first_molecule,
+                second_molecule,
+                molecule_relation,
+                context,
+            )
+            evidence, evidence_diagnostics = _vdw_evidence(
+                structure_sites[geometry.first_independent_site_id],
+                structure_sites[geometry.second_independent_site_id],
+                geometry.representative_distance,
+                reference,
+            )
+            diagnostics.extend(evidence_diagnostics)
+            complete = tuple(item for item in evidence if item.vdw_gap is not None)
+            accepted = tuple(
+                item
+                for item in complete
+                if item.vdw_gap <= self.policy.maximum_vdw_gap_angstrom  # type: ignore[operator]
+            )
+            missing = len(complete) != len(evidence) or not evidence
+            if not accepted and not missing:
+                continue
+            status = (
+                ResolutionStatus.INCOMPLETE
+                if cutoff_incomplete
+                or contact_analysis.pair_table.status is PairTableStatus.INCOMPLETE
+                or molecular_analysis.status is ResolutionStatus.INCOMPLETE
+                or missing
+                else ResolutionStatus.AMBIGUOUS
+                if len(accepted) != len(complete)
+                or molecular_analysis.status is ResolutionStatus.AMBIGUOUS
+                else ResolutionStatus.RESOLVED
+            )
+            vdw_values = tuple(item.vdw_gap for item in complete)
+            normalized_values = tuple(item.normalized_distance for item in complete)
+            contact_id = "intermolecular-contact-orbit:" + _digest({
+                "symmetry_action": context.symmetry_action_fingerprint,
+                "first_molecule_orbit_id": descriptor[0],
+                "second_molecule_orbit_id": descriptor[1],
+                "operation_key": descriptor[2].operation_key,
+                "lattice_translation": descriptor[2].lattice_translation,
+                "geometry_orbit_id": geometry.geometry_orbit_id,
+            })
+            output.append(IntermolecularContactOrbit(
+                contact_id,
+                geometry.geometry_orbit_id,
+                descriptor[0],
+                descriptor[1],
+                descriptor[2],
+                geometry.first_independent_site_id,
+                geometry.second_independent_site_id,
+                geometry.representative_distance,
+                evidence,
+                (min(vdw_values), max(vdw_values)) if vdw_values else None,  # type: ignore[arg-type]
+                (
+                    min(normalized_values),
+                    max(normalized_values),
+                ) if normalized_values else None,  # type: ignore[arg-type]
+                geometry.multiplicity_in_reference_cell,
+                (),
+                status,
+                evidence_diagnostics,
+                (
+                    ("method", "cristma.intermolecular_contact_orbits:1"),
+                    ("vdw_dataset_id", vdw_dataset_id),
+                    ("vdw_dataset_version", vdw_dataset_version),
+                ),
+            ))
+
+        ordered = tuple(sorted(output, key=lambda item: item.intermolecular_contact_orbit_id))
+        statuses = tuple(item.status for item in ordered)
+        status = (
+            ResolutionStatus.NOT_APPLICABLE
+            if not discrete
+            else ResolutionStatus.INCOMPLETE
+            if cutoff_incomplete
+            or contact_analysis.pair_table.status is PairTableStatus.INCOMPLETE
+            or molecular_analysis.status is ResolutionStatus.INCOMPLETE
+            or ResolutionStatus.INCOMPLETE in statuses
+            else ResolutionStatus.AMBIGUOUS
+            if molecular_analysis.status is ResolutionStatus.AMBIGUOUS
+            or ResolutionStatus.AMBIGUOUS in statuses
+            else ResolutionStatus.RESOLVED
+        )
+        return IntermolecularContactAnalysisResult(
+            contact_analysis,
+            molecular_analysis,
+            ordered,
+            status,
+            tuple(dict.fromkeys(diagnostics)),
+            tuple(sorted(self.policy.get_config())),
+            tuple(sorted((
+                ("method", "cristma.intermolecular_contact_analysis:1"),
+                ("pair_table_cutoff", contact_analysis.pair_table.cutoff),
+                ("symmetry_context_fingerprint", context.fingerprint),
+            ))),
+        )
+
+
 __all__ = [
     "MoleculeContactDescriptor",
+    "IntermolecularContactAnalyzer",
     "canonical_molecule_contact_relation",
     "molecular_component_stabilizer",
     "molecule_relation_for_atomic_pair",
