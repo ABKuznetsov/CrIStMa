@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 
 from cristma.chemistry import CompositionGrammar
 from cristma.crystallography import (
@@ -174,6 +175,7 @@ class ContactAnalyzer:
         *,
         distance_tolerance: float = 1e-12,
         max_candidates: int | None = None,
+        minimum_pair_cutoff: float | None = None,
     ) -> None:
         if not isinstance(policy, ShellResolutionPolicy):
             raise TypeError("policy must be ShellResolutionPolicy")
@@ -181,6 +183,15 @@ class ContactAnalyzer:
         self.reference = reference or ReferenceData.default()
         self.distance_tolerance = distance_tolerance
         self.max_candidates = max_candidates
+        if minimum_pair_cutoff is not None:
+            if isinstance(minimum_pair_cutoff, bool) or not isinstance(
+                minimum_pair_cutoff, (int, float)
+            ):
+                raise TypeError("minimum_pair_cutoff must be a real number or None")
+            minimum_pair_cutoff = float(minimum_pair_cutoff)
+            if not math.isfinite(minimum_pair_cutoff) or minimum_pair_cutoff <= 0.0:
+                raise ValueError("minimum_pair_cutoff must be finite and positive")
+        self.minimum_pair_cutoff = minimum_pair_cutoff
 
     def analyze(
         self,
@@ -191,6 +202,8 @@ class ContactAnalyzer:
         mapping = AsymmetricUnitMapper().build(structure, symmetry_context)
         if grammar.candidate_interactions:
             cutoff = _search_cutoff(grammar, self.reference, self.policy)
+            if self.minimum_pair_cutoff is not None:
+                cutoff = max(cutoff, self.minimum_pair_cutoff)
             pair_table = SymmetryPairFinder(
                 cutoff,
                 distance_tolerance=self.distance_tolerance,
@@ -246,6 +259,7 @@ class ContactAnalyzer:
                 **self.policy.get_config(),
                 "distance_tolerance": self.distance_tolerance,
                 "max_candidates": self.max_candidates,
+                "minimum_pair_cutoff": self.minimum_pair_cutoff,
             }.items())),
             (
                 ("method", "cristma.contact_analysis:1"),
