@@ -384,6 +384,13 @@ class IntermolecularContactAnalysisResult:
         if provenance_keys != tuple(sorted(set(provenance_keys))):
             raise ValueError("intermolecular provenance keys must be unique and sorted")
 
+    def materialize_contacts(self, region, **filters):
+        """Project contact orbits outward into a requested periodic region."""
+
+        from .materialization import IntermolecularContactMaterializer
+
+        return IntermolecularContactMaterializer().materialize(self, region, **filters)
+
 
 __all__ = [
     "HydrogenBondCandidate",

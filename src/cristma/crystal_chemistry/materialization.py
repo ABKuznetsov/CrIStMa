@@ -180,4 +180,90 @@ class ContactMaterializer:
         return tuple(sorted(contacts, key=lambda item: item.contact_id))
 
 
-__all__ = ["CellRange", "ContactMaterializer", "ReferenceCell", "ResolvedContact", "ShellMembership"]
+class IntermolecularContactMaterializer:
+    """Create intermolecular instances without feeding them back into science."""
+
+    def materialize(
+        self,
+        result,
+        region: ReferenceCell | CellRange,
+        contact_orbit_ids: tuple[str, ...] | None = None,
+        interpretation_ids: tuple[str, ...] | None = None,
+    ):
+        from .intermolecular_models import MaterializedIntermolecularContact
+
+        if not isinstance(region, (ReferenceCell, CellRange)):
+            raise TypeError("region must be ReferenceCell or CellRange")
+        selected_orbits = None if contact_orbit_ids is None else set(contact_orbit_ids)
+        selected_interpretations = (
+            None if interpretation_ids is None else set(interpretation_ids)
+        )
+        source = result._contact_analysis
+        geometry_by_id = {
+            item.geometry_orbit_id: item for item in source.pair_table.contact_orbits
+        }
+        contacts = []
+        for orbit in result.contact_orbits:
+            if (
+                selected_orbits is not None
+                and orbit.intermolecular_contact_orbit_id not in selected_orbits
+            ):
+                continue
+            interpretations = tuple(
+                item
+                for item in orbit.interpretations
+                if selected_interpretations is None
+                or item.interpretation_id in selected_interpretations
+            )
+            if selected_interpretations is not None and not interpretations:
+                continue
+            geometry = geometry_by_id[orbit.geometry_orbit_id]
+            for owner in _owners(source, geometry):
+                for owner_cell in region.owner_cells:
+                    first = PeriodicAtomRef(
+                        owner[0][1],
+                        tuple(
+                            owner[0][2][index] + owner_cell[index]
+                            for index in range(3)
+                        ),
+                    )
+                    second = PeriodicAtomRef(
+                        owner[1][1],
+                        tuple(
+                            owner[1][2][index] + owner_cell[index]
+                            for index in range(3)
+                        ),
+                    )
+                    vector = (
+                        _image_position(source, second) - _image_position(source, first)
+                    ) @ source._structure.cell.matrix
+                    contact_id = "intermolecular-contact:" + _digest({
+                        "intermolecular_contact_orbit_id": (
+                            orbit.intermolecular_contact_orbit_id
+                        ),
+                        "first": (first.atom_id, first.cell_translation),
+                        "second": (second.atom_id, second.cell_translation),
+                    })
+                    contacts.append(MaterializedIntermolecularContact(
+                        contact_id,
+                        orbit.intermolecular_contact_orbit_id,
+                        orbit.first_molecule_orbit_id,
+                        orbit.second_molecule_orbit_id,
+                        first,
+                        second,
+                        float(np.linalg.norm(vector)),
+                        tuple(float(value) for value in vector),
+                        interpretations,
+                        (*orbit.provenance, ("materialization", "canonical_owner")),
+                    ))
+        return tuple(sorted(contacts, key=lambda item: item.contact_id))
+
+
+__all__ = [
+    "CellRange",
+    "ContactMaterializer",
+    "IntermolecularContactMaterializer",
+    "ReferenceCell",
+    "ResolvedContact",
+    "ShellMembership",
+]
