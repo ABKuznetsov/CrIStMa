@@ -117,6 +117,12 @@ from .pi_systems import (
     PiSystemCandidate,
     PiSystemPolicy,
 )
+from .pi_stacking import (
+    PiStackingAnalysisResult,
+    PiStackingAnalyzer,
+    PiStackingCandidate,
+    PiStackingPolicy,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -161,6 +167,10 @@ __all__ = [
     "PolyhedronOrbitBuilder",
     "PolyhedronVertex",
     "PiComponentEvidence",
+    "PiStackingAnalysisResult",
+    "PiStackingAnalyzer",
+    "PiStackingCandidate",
+    "PiStackingPolicy",
     "PiSiteEvidence",
     "PiSystemAnalysisResult",
     "PiSystemAnalyzer",

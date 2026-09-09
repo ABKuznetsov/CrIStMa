@@ -274,6 +274,26 @@ only that a molecular ring passes the declared planarity and composition
 screen; it does not assign aromaticity, bond order, electron delocalization,
 or interaction energy.
 
+Pairs of retained pi-system candidates can be screened independently for
+stacking geometry:
+
+```python
+from cristma.crystal_chemistry import PiStackingAnalyzer, PiStackingPolicy
+
+pi_stacking = PiStackingAnalyzer(
+    PiStackingPolicy(
+        minimum_centroid_distance_angstrom=3.2,
+        maximum_centroid_distance_angstrom=4.2,
+        maximum_plane_angle_deg=20.0,
+        maximum_lateral_offset_angstrom=2.0,
+    )
+).analyze(result, molecular, pi_systems)
+```
+
+This search operates directly on symmetry orbits with an exact periodic
+relation and a cutoff-complete lattice buffer. It reports geometry-qualified
+pi-stacking candidates, not interaction energies or a packing hierarchy.
+
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:
 
