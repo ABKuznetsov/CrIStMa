@@ -131,6 +131,7 @@ from .packing_models import (
     PackingInteractionKind,
     PackingInteractionRef,
 )
+from .packing import PackingAnalyzer
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -143,6 +144,7 @@ __all__ = [
     "PackingConnectionOrbit",
     "PackingInteractionKind",
     "PackingInteractionRef",
+    "PackingAnalyzer",
     "CellRange",
     "ContactMaterializer",
     "HydrogenBondCandidate",

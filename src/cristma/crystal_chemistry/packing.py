@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 from cristma.crystallography import PeriodicSymmetryRelation, identity_relation
 from cristma.crystallography.pair_canonical import canonical_instance_owner
+from cristma.crystallography.symmetry_context import _digest
 
 from .ch_pi import CHPiAnalysisResult
 from .intermolecular import (
@@ -15,7 +17,14 @@ from .intermolecular import (
 from .intermolecular_models import IntermolecularContactAnalysisResult
 from .models import ResolutionStatus
 from .molecular import MolecularComponentOrbit
-from .packing_models import PackingInteractionKind, PackingInteractionRef
+from .packing_models import (
+    MolecularPackingComponent,
+    MolecularPackingGraph,
+    PackingConnectionOrbit,
+    PackingInteractionKind,
+    PackingInteractionRef,
+)
+from .periodic_connectivity import _relation_graph_components
 from .pi_stacking import PiStackingAnalysisResult, _feature
 
 
@@ -198,4 +207,166 @@ def _molecule_pair_multiplicity(
     return len(owners)
 
 
-__all__: list[str] = []
+def _aggregate_status(statuses, *, applicable: bool = True) -> ResolutionStatus:
+    statuses = tuple(statuses)
+    if ResolutionStatus.INCOMPLETE in statuses:
+        return ResolutionStatus.INCOMPLETE
+    if ResolutionStatus.AMBIGUOUS in statuses:
+        return ResolutionStatus.AMBIGUOUS
+    if not applicable or statuses and all(
+        item is ResolutionStatus.NOT_APPLICABLE for item in statuses
+    ):
+        return ResolutionStatus.NOT_APPLICABLE
+    return ResolutionStatus.RESOLVED
+
+
+@dataclass(frozen=True, slots=True)
+class PackingAnalyzer:
+    """Assemble existing molecular interactions into one exact quotient graph."""
+
+    def analyze(
+        self,
+        intermolecular_analysis: IntermolecularContactAnalysisResult,
+        pi_stacking_analysis: PiStackingAnalysisResult,
+        ch_pi_analysis: CHPiAnalysisResult,
+    ) -> MolecularPackingGraph:
+        if not isinstance(
+            intermolecular_analysis, IntermolecularContactAnalysisResult
+        ):
+            raise TypeError(
+                "intermolecular_analysis must be IntermolecularContactAnalysisResult"
+            )
+        if not isinstance(pi_stacking_analysis, PiStackingAnalysisResult):
+            raise TypeError("pi_stacking_analysis must be PiStackingAnalysisResult")
+        if not isinstance(ch_pi_analysis, CHPiAnalysisResult):
+            raise TypeError("ch_pi_analysis must be CHPiAnalysisResult")
+        contact_analysis, molecular_analysis, _ = _validate_source_lineage(
+            intermolecular_analysis, pi_stacking_analysis, ch_pi_analysis
+        )
+        context = contact_analysis._symmetry_context
+        mapping = contact_analysis._asymmetric_unit_mapping
+        molecules = {
+            item.component_orbit_id: item for item in molecular_analysis.molecule_orbits
+        }
+        evidence = _collect_packing_evidence(
+            intermolecular_analysis, pi_stacking_analysis, ch_pi_analysis
+        )
+        grouped = defaultdict(list)
+        for item in evidence:
+            grouped[item.descriptor].append(item)
+
+        connections = []
+        for descriptor, items in sorted(grouped.items()):
+            first_id, second_id, relation = descriptor
+            status = _aggregate_status(item.status for item in items)
+            connection_id = "packing-connection-orbit:" + _digest({
+                "symmetry_action": context.symmetry_action_fingerprint,
+                "first_molecule_orbit_id": first_id,
+                "second_molecule_orbit_id": second_id,
+                "operation_key": relation.operation_key,
+                "lattice_translation": relation.lattice_translation,
+            })
+            connections.append(PackingConnectionOrbit(
+                connection_id,
+                first_id,
+                second_id,
+                relation,
+                tuple(sorted({item.reference for item in items})),
+                _molecule_pair_multiplicity(
+                    descriptor, molecules, context, mapping
+                ),
+                status,
+                (),
+                (("method", "cristma.packing_connection_orbit:1"),),
+            ))
+        ordered_connections = tuple(sorted(
+            connections, key=lambda item: item.packing_connection_orbit_id
+        ))
+
+        source_status = _aggregate_status((
+            intermolecular_analysis.status,
+            pi_stacking_analysis.status,
+            ch_pi_analysis.status,
+        ), applicable=bool(molecules))
+        graph_components = _relation_graph_components(
+            tuple(sorted(molecules)),
+            tuple(
+                (
+                    item.packing_connection_orbit_id,
+                    item.first_molecule_orbit_id,
+                    item.second_molecule_orbit_id,
+                    item.canonical_molecule_relation,
+                )
+                for item in ordered_connections
+            ),
+            context,
+        )
+        components = []
+        connection_by_id = {
+            item.packing_connection_orbit_id: item for item in ordered_connections
+        }
+        for item in graph_components:
+            statuses = tuple(
+                connection_by_id[connection_id].status
+                for connection_id in item.edge_ids
+            )
+            component_status = _aggregate_status(
+                (source_status, *statuses), applicable=True
+            )
+            component_id = "packing-component:" + _digest({
+                "molecule_orbit_ids": item.node_ids,
+                "connection_orbit_ids": item.edge_ids,
+                "closure_relations": tuple(
+                    (relation.operation_key, relation.lattice_translation)
+                    for relation in item.closure_relations
+                ),
+                "periodic_generators": item.periodic_generators,
+            })
+            components.append(MolecularPackingComponent(
+                component_id,
+                item.node_ids,
+                item.edge_ids,
+                item.image_relations,
+                item.closure_relations,
+                item.rank,
+                item.periodic_generators,
+                component_status,
+            ))
+        ordered_components = tuple(sorted(
+            components, key=lambda item: item.packing_component_id
+        ))
+        overall_status = _aggregate_status(
+            (
+                source_status,
+                *(item.status for item in ordered_connections),
+                *(item.status for item in ordered_components),
+            ),
+            applicable=bool(molecules),
+        )
+        return MolecularPackingGraph(
+            intermolecular_analysis,
+            pi_stacking_analysis,
+            ch_pi_analysis,
+            tuple(sorted(molecules)),
+            ordered_connections,
+            ordered_components,
+            overall_status,
+            (),
+            (),
+            tuple(sorted((
+                ("ch_pi_configuration_fingerprint", _digest({
+                    "configuration": ch_pi_analysis.configuration,
+                })),
+                ("intermolecular_configuration_fingerprint", _digest({
+                    "configuration": intermolecular_analysis.configuration,
+                })),
+                ("method", "cristma.molecular_packing_graph:1"),
+                ("pi_stacking_configuration_fingerprint", _digest({
+                    "configuration": pi_stacking_analysis.configuration,
+                })),
+                ("symmetry_context_fingerprint", context.fingerprint),
+            ))),
+        )
+
+
+__all__ = ["PackingAnalyzer"]
