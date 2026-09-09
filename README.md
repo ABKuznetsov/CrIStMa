@@ -313,6 +313,25 @@ relation and source bond orbit remain explicit; missing hydrogens are never
 generated, and a molecule's own pi system is excluded by exact molecular-orbit
 identity rather than a coordinate heuristic.
 
+The completed interaction results can then be assembled into one molecular
+packing quotient graph:
+
+```python
+from cristma.crystal_chemistry import PackingAnalyzer
+
+packing = PackingAnalyzer().analyze(
+    intermolecular,
+    pi_stacking,
+    ch_pi,
+)
+```
+
+Graph nodes reference discrete molecule orbits. Exact relation-labelled edges
+merge van der Waals, hydrogen-bond, pi-stacking, and C-H...pi evidence that
+describes the same molecular pair relation. Connected-component rank is an
+exact periodic-connectivity result only; CrIStMa does not assign interaction
+energies, motif names, a preferred packing hierarchy, or presentation state.
+
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:
 
@@ -338,8 +357,8 @@ intermolecular = IntermolecularContactAnalyzer(
 This first slice reports symmetry-unique geometric contact orbits, exact
 molecule-to-molecule periodic relations, van der Waals distance evidence, and
 geometry-qualified hydrogen-bond candidates for explicit H or D atoms. It does
-not infer missing hydrogens. Packing assemblies, voids, interaction energies,
-Hirshfeld surfaces, and reticular topology are deferred.
+not infer missing hydrogens. Named packing assemblies, voids, interaction
+energies, Hirshfeld surfaces, and reticular topology are deferred.
 Metal-organic fragments are not presented as ordinary molecular packing.
 
 `ContactAnalysisResult` exposes pair orbits, chemically resolved contact
@@ -641,7 +660,8 @@ classification. The current `0.1.0b8` development line adds the one-call
 powder-pattern facade while retaining every intermediate reciprocal result and
 keeping instrument and phase-local sample broadening explicit, plus bounded
 molecular rings, pi-system, pi-stacking, and explicit C-H/C-D...pi geometry.
-The implemented
+It also assembles these independently calculated interactions into an exact
+molecular packing quotient graph. The implemented
 scientific core is covered by automated tests and is ready for evaluation and
 integration. Until the first stable release, public APIs may still change when
 required to correct or clarify scientific contracts.
