@@ -256,6 +256,24 @@ without discarding rings already proved; degenerate geometry likewise keeps
 the graph ring and reports the unavailable descriptor diagnostically. This
 layer makes no aromaticity, pi-system or smallest-ring-set claim.
 
+Pi-system screening is a separate optional calculation, so molecular
+connectivity and ring identity never depend on this interpretation:
+
+```python
+from cristma.crystal_chemistry import PiSystemAnalyzer, PiSystemPolicy
+
+pi_systems = PiSystemAnalyzer(
+    PiSystemPolicy(maximum_planarity_rms_angstrom=0.12)
+).analyze(result, molecular)
+```
+
+Each retained candidate preserves the complete component and occupancy
+evidence at every ring position. Mixed qualifying and non-qualifying
+components remain explicit and make the candidate ambiguous. The result means
+only that a molecular ring passes the declared planarity and composition
+screen; it does not assign aromaticity, bond order, electron delocalization,
+or interaction energy.
+
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:
 
