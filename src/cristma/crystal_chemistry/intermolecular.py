@@ -383,6 +383,8 @@ class IntermolecularContactAnalyzer:
             raise TypeError("contact_analysis must be ContactAnalysisResult")
         if not isinstance(molecular_analysis, MolecularAnalysisResult):
             raise TypeError("molecular_analysis must be MolecularAnalysisResult")
+        if molecular_analysis.contact_analysis_fingerprint != contact_analysis.fingerprint:
+            raise ValueError("molecular and contact analysis lineage disagree")
         reference = self.reference or ReferenceData.default()
         context = contact_analysis._symmetry_context
         geometry_by_id = {

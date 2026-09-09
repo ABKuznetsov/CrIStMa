@@ -14,6 +14,7 @@ from cristma.crystallography import (
     SymmetryPairFinder,
     SymmetryPairTable,
 )
+from cristma.crystallography.symmetry_context import _digest
 from cristma.diagnostics import Diagnostic
 from cristma.reference_data import ReferenceData
 from cristma.structure import CrystalStructure
@@ -136,6 +137,25 @@ class ContactAnalysisResult:
         return ContactMaterializer().materialize(self, region, **filters)
 
     @property
+    def fingerprint(self) -> str:
+        """Return deterministic lineage identity for dependent analyses."""
+
+        return _digest({
+            "structure_id": self._structure.id,
+            "site_ids": tuple(site.id for site in self._structure.sites),
+            "symmetry_context_fingerprint": self._symmetry_context.fingerprint,
+            "mapping_fingerprint": self._asymmetric_unit_mapping.fingerprint,
+            "geometry_orbit_ids": tuple(
+                item.geometry_orbit_id for item in self.pair_table.contact_orbits
+            ),
+            "resolved_contact_orbit_ids": tuple(
+                item.resolved_contact_orbit_id for item in self.contact_orbits
+            ),
+            "configuration": self.configuration,
+            "grammar_method": (self.grammar.method_id, self.grammar.method_version),
+        })
+
+    @property
     def contacts(self):
         """Temporary read-only reference-cell compatibility view."""
 
@@ -200,10 +220,13 @@ class ContactAnalyzer:
         grammar: CompositionGrammar,
     ) -> ContactAnalysisResult:
         mapping = AsymmetricUnitMapper().build(structure, symmetry_context)
-        if grammar.candidate_interactions:
-            cutoff = _search_cutoff(grammar, self.reference, self.policy)
-            if self.minimum_pair_cutoff is not None:
-                cutoff = max(cutoff, self.minimum_pair_cutoff)
+        if grammar.candidate_interactions or self.minimum_pair_cutoff is not None:
+            cutoff = (
+                _search_cutoff(grammar, self.reference, self.policy)
+                if grammar.candidate_interactions
+                else 0.0
+            )
+            cutoff = max(cutoff, self.minimum_pair_cutoff or 0.0)
             pair_table = SymmetryPairFinder(
                 cutoff,
                 distance_tolerance=self.distance_tolerance,

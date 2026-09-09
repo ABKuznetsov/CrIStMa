@@ -141,8 +141,11 @@ class MolecularAnalysisResult:
     diagnostics: tuple[Diagnostic, ...]
     configuration: tuple[tuple[str, object], ...]
     provenance: tuple[tuple[str, object], ...]
+    contact_analysis_fingerprint: str
 
     def __post_init__(self) -> None:
+        if not self.contact_analysis_fingerprint:
+            raise ValueError("molecular analysis requires contact-analysis lineage")
         for values, name, attribute in (
             (self.bond_orbits, "bond", "bond_orbit_id"),
             (self.component_orbits, "component", "component_orbit_id"),
@@ -240,6 +243,7 @@ class MolecularAnalyzer:
                 (),
                 tuple(sorted(self.policy.get_config().items())),
                 (("method", "cristma.molecular_analysis:1"),),
+                contact_result.fingerprint,
             )
 
         participating_elements = {
@@ -434,6 +438,7 @@ class MolecularAnalyzer:
                 ("symmetry_context_fingerprint", context.fingerprint),
                 ("contact_analysis_method", "cristma.contact_analysis:1"),
             ),
+            contact_result.fingerprint,
         )
 
 
