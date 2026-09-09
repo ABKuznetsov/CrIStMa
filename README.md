@@ -243,6 +243,35 @@ a discrete molecule, ranks one and two are a chain and layer, and rank three
 is a framework. Packing contacts are not promoted to molecular bonds merely
 because they occurred inside the broader contact-search buffer.
 
+Intermolecular contacts reuse that same bounded pair table; they never launch
+a second neighbour search:
+
+```python
+from cristma.crystal_chemistry import (
+    IntermolecularContactAnalyzer,
+    IntermolecularContactPolicy,
+)
+
+intermolecular_policy = IntermolecularContactPolicy()
+result = ContactAnalyzer(
+    ShellResolutionPolicy(1.60, 0.01, 0.08, 0.01, 2.0),
+    minimum_pair_cutoff=intermolecular_policy.maximum_distance_angstrom,
+).analyze(crystal, context, chemistry.grammar)
+molecular = MolecularAnalyzer(
+    MolecularAnalysisPolicy(maximum_bond_rho=1.25)
+).analyze(result)
+intermolecular = IntermolecularContactAnalyzer(
+    intermolecular_policy
+).analyze(result, molecular)
+```
+
+This first slice reports symmetry-unique geometric contact orbits, exact
+molecule-to-molecule periodic relations, van der Waals distance evidence, and
+geometry-qualified hydrogen-bond candidates for explicit H or D atoms. It does
+not infer missing hydrogens. Pi interactions, packing assemblies, voids,
+interaction energies, Hirshfeld surfaces, and reticular topology are deferred.
+Metal-organic fragments are not presented as ordinary molecular packing.
+
 `ContactAnalysisResult` exposes pair orbits, chemically resolved contact
 orbits, oriented incidence orbits, coordination-shell alternatives, explicit
 status, diagnostics, configuration and provenance. Polyhedron orbits retain
