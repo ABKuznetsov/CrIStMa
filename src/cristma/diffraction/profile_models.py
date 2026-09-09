@@ -230,6 +230,7 @@ class PowderProfileProvenance:
     lines_considered: int
     lines_contributed: int
     sample_broadening: IsotropicSampleBroadening | None = None
+    d_spacing_scale: float = 1.0
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -259,6 +260,11 @@ class PowderProfileProvenance:
             raise TypeError("sample_broadening must be IsotropicSampleBroadening or None")
         object.__setattr__(
             self, "zero_shift_deg", _finite(self.zero_shift_deg, "zero shift")
+        )
+        object.__setattr__(
+            self,
+            "d_spacing_scale",
+            _positive_finite(self.d_spacing_scale, "d-spacing scale"),
         )
         object.__setattr__(
             self,

@@ -458,8 +458,18 @@ profile = PowderProfileCalculator().calculate(
     grid,
     instrument,
     zero_shift_deg=zero_shift,
+    d_spacing_scale=estimated_d_scale,
 )
 ```
+
+`d_spacing_scale` is an optional fast peak-position transform for search and
+screening workflows. Each radiation component is moved independently using
+Bragg's law with `d_scaled = d * d_spacing_scale`; instrument and phase-local
+widths are then evaluated at the moved angle, and `zero_shift_deg` is applied
+last. The transform deliberately retains the supplied line intensities and
+does not claim to recompute the structure, structure factors, multiplicities,
+or angle-dependent corrections. Its exact value is recorded in profile
+provenance.
 
 CrIStMa has no built-in instrument preset and does not read refinement project
 files. Every peak kernel is area-normalized and evaluated only in a local

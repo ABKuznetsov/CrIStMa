@@ -68,6 +68,7 @@ class PowderProfileCalculator:
         *,
         zero_shift_deg: float = 0.0,
         sample_broadening: IsotropicSampleBroadening | None = None,
+        d_spacing_scale: float = 1.0,
     ) -> CalculatedProfile:
         if not isinstance(lines, (PowderLineSet, CorrectedPowderLineSet)):
             raise TypeError("lines must be PowderLineSet or CorrectedPowderLineSet")
@@ -88,6 +89,13 @@ class PowderProfileCalculator:
         shift = float(zero_shift_deg)
         if not math.isfinite(shift):
             raise ValueError("zero_shift_deg must be finite")
+        if isinstance(d_spacing_scale, bool) or not isinstance(
+            d_spacing_scale, (int, float)
+        ):
+            raise TypeError("d_spacing_scale must be a real number")
+        spacing_scale = float(d_spacing_scale)
+        if not math.isfinite(spacing_scale) or spacing_scale <= 0.0:
+            raise ValueError("d_spacing_scale must be finite and positive")
 
         requested_points = grid.point_count
         if self.max_points is not None and requested_points > self.max_points:
@@ -98,14 +106,19 @@ class PowderProfileCalculator:
         if isinstance(lines, CorrectedPowderLineSet):
             source_lines = lines.lines
             powder_lines = lines.powder_lines.lines
+            family_source = lines.powder_lines
             basis = ProfileIntensityBasis.CORRECTED
             intensities = tuple(item.corrected_line_intensity for item in source_lines)
         else:
             source_lines = lines.lines
             powder_lines = source_lines
+            family_source = lines
             basis = ProfileIntensityBasis.INTRINSIC
             intensities = tuple(item.intrinsic_line_intensity for item in source_lines)
 
+        d_spacing_by_family = {
+            family.family_id: family.d_spacing for family in family_source.families
+        }
         contributed = 0
         for line, powder_line, line_intensity in zip(
             source_lines,
@@ -116,6 +129,17 @@ class PowderProfileCalculator:
             if line_intensity == 0.0:
                 continue
             original_center = line.two_theta_deg
+            if spacing_scale != 1.0:
+                scaled_sine = powder_line.wavelength_angstrom / (
+                    2.0
+                    * d_spacing_by_family[powder_line.family_id]
+                    * spacing_scale
+                )
+                if scaled_sine > 1.0:
+                    raise ValueError(
+                        "scaled d spacing violates the Bragg condition"
+                    )
+                original_center = math.degrees(2.0 * math.asin(scaled_sine))
             center = original_center + shift
             if isinstance(broadening, ConstantWidthProfile):
                 fwhm = broadening.fwhm_deg
@@ -176,7 +200,7 @@ class PowderProfileCalculator:
             model_id += "+isotropic_sample_tch"
         provenance = PowderProfileProvenance(
             method="cristma.diffraction.PowderProfileCalculator",
-            version="2",
+            version="3",
             broadening_model=model_id,
             broadening_scope=(
                 "instrument_only"
@@ -191,6 +215,7 @@ class PowderProfileCalculator:
             lines_considered=len(source_lines),
             lines_contributed=contributed,
             sample_broadening=sample_broadening,
+            d_spacing_scale=spacing_scale,
         )
         return CalculatedProfile(
             two_theta_deg=tuple(float(value) for value in angles),
