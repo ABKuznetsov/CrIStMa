@@ -18,6 +18,7 @@ from cristma.diagnostics import Diagnostic, Severity
 
 from .contact_analysis import ContactAnalysisResult
 from .models import ComponentPairInterpretation, ResolutionStatus
+from .molecular_rings import MolecularRingOrbit
 from .periodic_connectivity import integer_translation_lattice_basis
 
 
@@ -142,6 +143,7 @@ class MolecularAnalysisResult:
     configuration: tuple[tuple[str, object], ...]
     provenance: tuple[tuple[str, object], ...]
     contact_analysis_fingerprint: str
+    ring_orbits: tuple[MolecularRingOrbit, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.contact_analysis_fingerprint:
@@ -159,6 +161,24 @@ class MolecularAnalysisResult:
             for component in self.component_orbits
         ):
             raise ValueError("molecular component references an unknown bond orbit")
+        ring_ids = tuple(item.ring_orbit_id for item in self.ring_orbits)
+        if ring_ids != tuple(sorted(set(ring_ids))):
+            raise ValueError("molecular ring-orbit IDs must be unique and sorted")
+        component_by_id = {
+            item.component_orbit_id: item for item in self.component_orbits
+        }
+        for ring in self.ring_orbits:
+            parent = component_by_id.get(ring.parent_component_orbit_id)
+            if parent is None:
+                raise ValueError("molecular ring references an unknown component orbit")
+            if parent.kind is not MolecularComponentKind.DISCRETE_MOLECULE:
+                raise ValueError("molecular ring parent must be a discrete molecule")
+            if not set(ring.bond_orbit_ids) <= set(parent.bond_orbit_ids):
+                raise ValueError("molecular ring references a bond outside its parent")
+        if any(
+            ring.status is ResolutionStatus.INCOMPLETE for ring in self.ring_orbits
+        ) and self.status is not ResolutionStatus.INCOMPLETE:
+            raise ValueError("incomplete molecular ring must propagate to result status")
 
     @property
     def molecule_orbits(self) -> tuple[MolecularComponentOrbit, ...]:
