@@ -104,6 +104,11 @@ from .molecular import (
     MolecularComponentKind,
     MolecularComponentOrbit,
 )
+from .molecular_rings import (
+    MolecularAtomOrbitRef,
+    MolecularRingOrbit,
+    MolecularRingSearchPolicy,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -125,9 +130,12 @@ __all__ = [
     "MolecularAnalysisPolicy",
     "MolecularAnalysisResult",
     "MolecularAnalyzer",
+    "MolecularAtomOrbitRef",
     "MolecularBondOrbit",
     "MolecularComponentKind",
     "MolecularComponentOrbit",
+    "MolecularRingOrbit",
+    "MolecularRingSearchPolicy",
     "MaterializedIntermolecularContact",
     "CoordinationShellAlternative",
     "CoordinationShellOrbit",

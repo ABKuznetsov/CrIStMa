@@ -230,10 +230,15 @@ Molecular connectivity is a separate calculation over the same resolved
 contact orbits. Its bond boundary is explicit and phase-independent:
 
 ```python
-from cristma.crystal_chemistry import MolecularAnalysisPolicy, MolecularAnalyzer
+from cristma.crystal_chemistry import (
+    MolecularAnalysisPolicy,
+    MolecularAnalyzer,
+    MolecularRingSearchPolicy,
+)
 
 molecular = MolecularAnalyzer(
-    MolecularAnalysisPolicy(maximum_bond_rho=1.25)
+    MolecularAnalysisPolicy(maximum_bond_rho=1.25),
+    MolecularRingSearchPolicy(maximum_ring_size=12),
 ).analyze(result)
 ```
 
@@ -242,6 +247,14 @@ periodicity is derived from exact affine-labelled graph closures: rank zero is
 a discrete molecule, ranks one and two are a chain and layer, and rank three
 is a framework. Packing contacts are not promoted to molecular bonds merely
 because they occurred inside the broader contact-search buffer.
+
+For proven discrete molecular components, `ring_orbits` reports bounded,
+symmetry-unique chordless shortest-return graph cycles. Ring atoms retain
+exact periodic relations, while centroid, normal and planarity RMS are derived
+geometric descriptors. A reached search bound marks the result incomplete
+without discarding rings already proved; degenerate geometry likewise keeps
+the graph ring and reports the unavailable descriptor diagnostically. This
+layer makes no aromaticity, pi-system or smallest-ring-set claim.
 
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:

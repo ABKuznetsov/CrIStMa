@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 import math
 
@@ -18,7 +18,11 @@ from cristma.diagnostics import Diagnostic, Severity
 
 from .contact_analysis import ContactAnalysisResult
 from .models import ComponentPairInterpretation, ResolutionStatus
-from .molecular_rings import MolecularRingOrbit
+from .molecular_rings import (
+    MolecularRingOrbit,
+    MolecularRingSearchPolicy,
+    find_molecular_ring_orbits,
+)
 from .periodic_connectivity import integer_translation_lattice_basis
 
 
@@ -241,10 +245,24 @@ def _component_status(bonds: tuple[MolecularBondOrbit, ...]) -> ResolutionStatus
 @dataclass(frozen=True, slots=True)
 class MolecularAnalyzer:
     policy: MolecularAnalysisPolicy
+    ring_policy: MolecularRingSearchPolicy = field(
+        default_factory=MolecularRingSearchPolicy
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.policy, MolecularAnalysisPolicy):
             raise TypeError("policy must be MolecularAnalysisPolicy")
+        if not isinstance(self.ring_policy, MolecularRingSearchPolicy):
+            raise TypeError("ring_policy must be MolecularRingSearchPolicy")
+
+    def _configuration(self) -> tuple[tuple[str, object], ...]:
+        return tuple(sorted({
+            **self.policy.get_config(),
+            **{
+                f"ring_{key}": value
+                for key, value in self.ring_policy.get_config().items()
+            },
+        }.items()))
 
     def analyze(self, contact_result: ContactAnalysisResult) -> MolecularAnalysisResult:
         if not isinstance(contact_result, ContactAnalysisResult):
@@ -261,7 +279,7 @@ class MolecularAnalyzer:
                 (),
                 ResolutionStatus.NOT_APPLICABLE,
                 (),
-                tuple(sorted(self.policy.get_config().items())),
+                self._configuration(),
                 (("method", "cristma.molecular_analysis:1"),),
                 contact_result.fingerprint,
             )
@@ -438,10 +456,20 @@ class MolecularAnalyzer:
         ordered_components = tuple(
             sorted(components, key=lambda item: item.component_orbit_id)
         )
-        statuses = tuple(item.status for item in ordered_components)
+        ring_orbits, ring_diagnostics = find_molecular_ring_orbits(
+            contact_result._structure,
+            context,
+            ordered_bonds,
+            ordered_components,
+            self.ring_policy,
+        )
+        statuses = tuple(item.status for item in ordered_components) + tuple(
+            item.status for item in ring_orbits
+        )
         result_status = (
             ResolutionStatus.INCOMPLETE
             if contact_result.pair_table.status is PairTableStatus.INCOMPLETE
+            or ring_diagnostics
             or ResolutionStatus.INCOMPLETE in statuses
             else ResolutionStatus.AMBIGUOUS
             if ResolutionStatus.AMBIGUOUS in statuses
@@ -451,14 +479,19 @@ class MolecularAnalyzer:
             ordered_bonds,
             ordered_components,
             result_status,
-            tuple(dict.fromkeys((*contact_result.pair_table.diagnostics, *diagnostics))),
-            tuple(sorted(self.policy.get_config().items())),
+            tuple(dict.fromkeys((
+                *contact_result.pair_table.diagnostics,
+                *diagnostics,
+                *ring_diagnostics,
+            ))),
+            self._configuration(),
             (
                 ("method", "cristma.molecular_analysis:1"),
                 ("symmetry_context_fingerprint", context.fingerprint),
                 ("contact_analysis_method", "cristma.contact_analysis:1"),
             ),
             contact_result.fingerprint,
+            ring_orbits,
         )
 
 
