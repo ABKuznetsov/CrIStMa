@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from cristma.crystallography import PeriodicSymmetryRelation, identity_relation
 from cristma.diagnostics import Diagnostic
 from .representation import StructuralRepresentation
-from .structural_graph import StructuralConnectionOrbit
 
 Translation = tuple[int, int, int]
 ZERO: Translation = (0, 0, 0)
@@ -38,6 +37,16 @@ class PeriodicConnectivityResult:
     def __post_init__(self) -> None:
         if not self.representation_id:
             raise ValueError("connectivity result requires a representation ID")
+
+
+@dataclass(frozen=True, slots=True)
+class _RelationGraphComponent:
+    node_ids: tuple[str, ...]
+    edge_ids: tuple[str, ...]
+    image_relations: tuple[tuple[str, PeriodicSymmetryRelation], ...]
+    closure_relations: tuple[PeriodicSymmetryRelation, ...]
+    rank: int
+    periodic_generators: tuple[Translation, ...]
 
 
 def _negative(vector: Translation) -> Translation:
@@ -123,8 +132,74 @@ def _translation_kernel(relations, context) -> tuple[Translation, ...]:
     return tuple(sorted(translations))
 
 
-def _component_connections(unit_ids: set[str], connections: tuple[StructuralConnectionOrbit, ...]):
-    return tuple(x for x in connections if x.first_unit_orbit_id in unit_ids and x.second_unit_orbit_id in unit_ids)
+def _relation_graph_components(
+    node_ids: tuple[str, ...],
+    edges: tuple[tuple[str, str, str, PeriodicSymmetryRelation], ...],
+    context,
+) -> tuple[_RelationGraphComponent, ...]:
+    """Return exact components of an affine-relation-labelled quotient graph."""
+
+    if any(not isinstance(node_id, str) or not node_id for node_id in node_ids):
+        raise ValueError("relation-graph node IDs must not be empty")
+    if len(set(node_ids)) != len(node_ids):
+        raise ValueError("relation-graph node IDs must be unique")
+    known_nodes = set(node_ids)
+    edge_ids = tuple(edge_id for edge_id, _, _, _ in edges)
+    if any(not isinstance(edge_id, str) or not edge_id for edge_id in edge_ids):
+        raise ValueError("relation-graph edge IDs must not be empty")
+    if len(set(edge_ids)) != len(edge_ids):
+        raise ValueError("relation-graph edge IDs must be unique")
+    if any(first not in known_nodes or second not in known_nodes
+           for _, first, second, _ in edges):
+        raise ValueError("relation-graph edge references an unknown node")
+
+    adjacency: dict[str, list[tuple[str, PeriodicSymmetryRelation, str]]] = {
+        node_id: [] for node_id in known_nodes
+    }
+    for edge_id, first, second, relation in edges:
+        adjacency[first].append((second, relation, edge_id))
+        adjacency[second].append((first, relation.inverse(context), edge_id))
+    for values in adjacency.values():
+        values.sort(key=lambda item: (item[2], item[0], item[1]))
+
+    identity = identity_relation(context)
+    components = []
+    remaining = set(known_nodes)
+    while remaining:
+        root = min(remaining)
+        images = {root: identity}
+        queue = deque((root,))
+        closures: set[PeriodicSymmetryRelation] = set()
+        while queue:
+            current = queue.popleft()
+            for neighbor, gain, _ in adjacency[current]:
+                proposed = images[current].compose(gain, context)
+                known = images.get(neighbor)
+                if known is None:
+                    images[neighbor] = proposed
+                    queue.append(neighbor)
+                else:
+                    closure = proposed.compose(known.inverse(context), context)
+                    if closure != identity:
+                        closures.add(closure)
+        component_nodes = tuple(sorted(images))
+        remaining -= set(component_nodes)
+        component_edges = tuple(sorted(
+            edge_id
+            for edge_id, first, second, _ in edges
+            if first in images and second in images
+        ))
+        translations = _translation_kernel(tuple(sorted(closures)), context)
+        basis = integer_translation_lattice_basis(translations)
+        components.append(_RelationGraphComponent(
+            component_nodes,
+            component_edges,
+            tuple(sorted(images.items())),
+            tuple(sorted(closures)),
+            len(basis),
+            basis,
+        ))
+    return tuple(sorted(components, key=lambda item: item.node_ids))
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,41 +214,31 @@ class PeriodicConnectivityAnalyzer:
 
     def analyze(self, representation: StructuralRepresentation) -> PeriodicConnectivityResult:
         context = representation._symmetry_context
-        unit_ids = {x.unit_orbit_id for x in representation.unit_orbits}
-        adjacency: dict[str, list[tuple[str, PeriodicSymmetryRelation, str]]] = {x: [] for x in unit_ids}
-        for edge in representation.connection_orbits:
-            adjacency[edge.first_unit_orbit_id].append((edge.second_unit_orbit_id, edge.periodic_relation, edge.connection_orbit_id))
-            adjacency[edge.second_unit_orbit_id].append((edge.first_unit_orbit_id, edge.periodic_relation.inverse(context), edge.connection_orbit_id))
-        for values in adjacency.values():
-            values.sort(key=lambda x: (x[2], x[0], x[1]))
-        components: list[PeriodicComponent] = []
-        remaining = set(unit_ids)
-        while remaining:
-            root = min(remaining)
-            images = {root: identity_relation(context)}
-            queue = deque((root,))
-            closures: set[PeriodicSymmetryRelation] = set()
-            while queue:
-                current = queue.popleft()
-                for neighbor, gain, _ in adjacency[current]:
-                    proposed = images[current].compose(gain, context)
-                    known = images.get(neighbor)
-                    if known is None:
-                        images[neighbor] = proposed
-                        queue.append(neighbor)
-                    else:
-                        closure = proposed.compose(known.inverse(context), context)
-                        if closure != identity_relation(context):
-                            closures.add(closure)
-            component_units = tuple(sorted(images))
-            remaining -= set(component_units)
-            edges = _component_connections(set(component_units), representation.connection_orbits)
-            translations = _translation_kernel(tuple(sorted(closures)), context)
-            basis = integer_translation_lattice_basis(translations)
-            components.append(PeriodicComponent(
-                "component:" + root, component_units, tuple(sorted(x.connection_orbit_id for x in edges)),
-                tuple(sorted(images.items())), tuple(sorted(closures)), len(basis), basis,
-            ))
+        graph_components = _relation_graph_components(
+            tuple(item.unit_orbit_id for item in representation.unit_orbits),
+            tuple(
+                (
+                    edge.connection_orbit_id,
+                    edge.first_unit_orbit_id,
+                    edge.second_unit_orbit_id,
+                    edge.periodic_relation,
+                )
+                for edge in representation.connection_orbits
+            ),
+            context,
+        )
+        components = tuple(
+            PeriodicComponent(
+                "component:" + item.node_ids[0],
+                item.node_ids,
+                item.edge_ids,
+                item.image_relations,
+                item.closure_relations,
+                item.rank,
+                item.periodic_generators,
+            )
+            for item in graph_components
+        )
         return PeriodicConnectivityResult(representation.representation_id,
                                           tuple(sorted(components, key=lambda x: x.component_id)),
                                           provenance=(("method", "cristma.periodic_connectivity_analyzer:2"),))
