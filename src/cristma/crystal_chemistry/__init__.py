@@ -123,9 +123,14 @@ from .pi_stacking import (
     PiStackingCandidate,
     PiStackingPolicy,
 )
+from .ch_pi import CHPiAnalysisResult, CHPiAnalyzer, CHPiCandidate, CHPiPolicy
 
 __all__ = [
     "ComponentPairInterpretation",
+    "CHPiAnalysisResult",
+    "CHPiAnalyzer",
+    "CHPiCandidate",
+    "CHPiPolicy",
     "CellRange",
     "ContactMaterializer",
     "HydrogenBondCandidate",

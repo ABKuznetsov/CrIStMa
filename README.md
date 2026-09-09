@@ -294,6 +294,25 @@ This search operates directly on symmetry orbits with an exact periodic
 relation and a cutoff-complete lattice buffer. It reports geometry-qualified
 pi-stacking candidates, not interaction energies or a packing hierarchy.
 
+Explicit C-H and C-D molecular-bond orbits can be screened independently
+against those same pi-system candidates:
+
+```python
+from cristma.crystal_chemistry import CHPiAnalyzer, CHPiPolicy
+
+ch_pi = CHPiAnalyzer(
+    CHPiPolicy(
+        maximum_hydrogen_centroid_distance_angstrom=3.0,
+        minimum_carbon_hydrogen_centroid_angle_deg=120.0,
+    )
+).analyze(result, molecular, pi_systems)
+```
+
+The reported angle is C-H-centroid at hydrogen. The directed periodic
+relation and source bond orbit remain explicit; missing hydrogens are never
+generated, and a molecule's own pi system is excluded by exact molecular-orbit
+identity rather than a coordinate heuristic.
+
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:
 
@@ -319,8 +338,8 @@ intermolecular = IntermolecularContactAnalyzer(
 This first slice reports symmetry-unique geometric contact orbits, exact
 molecule-to-molecule periodic relations, van der Waals distance evidence, and
 geometry-qualified hydrogen-bond candidates for explicit H or D atoms. It does
-not infer missing hydrogens. Pi interactions, packing assemblies, voids,
-interaction energies, Hirshfeld surfaces, and reticular topology are deferred.
+not infer missing hydrogens. Packing assemblies, voids, interaction energies,
+Hirshfeld surfaces, and reticular topology are deferred.
 Metal-organic fragments are not presented as ordinary molecular packing.
 
 `ContactAnalysisResult` exposes pair orbits, chemically resolved contact
@@ -620,7 +639,9 @@ local `0.1.0b7` development line adds orbit-first molecular bond and component
 analysis with explicit normalized-distance policy and exact periodic-rank
 classification. The current `0.1.0b8` development line adds the one-call
 powder-pattern facade while retaining every intermediate reciprocal result and
-keeping instrument and phase-local sample broadening explicit. The implemented
+keeping instrument and phase-local sample broadening explicit, plus bounded
+molecular rings, pi-system, pi-stacking, and explicit C-H/C-D...pi geometry.
+The implemented
 scientific core is covered by automated tests and is ready for evaluation and
 integration. Until the first stable release, public APIs may still change when
 required to correct or clarify scientific contracts.
