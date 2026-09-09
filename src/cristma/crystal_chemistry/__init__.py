@@ -124,6 +124,13 @@ from .pi_stacking import (
     PiStackingPolicy,
 )
 from .ch_pi import CHPiAnalysisResult, CHPiAnalyzer, CHPiCandidate, CHPiPolicy
+from .packing_models import (
+    MolecularPackingComponent,
+    MolecularPackingGraph,
+    PackingConnectionOrbit,
+    PackingInteractionKind,
+    PackingInteractionRef,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -131,6 +138,11 @@ __all__ = [
     "CHPiAnalyzer",
     "CHPiCandidate",
     "CHPiPolicy",
+    "MolecularPackingComponent",
+    "MolecularPackingGraph",
+    "PackingConnectionOrbit",
+    "PackingInteractionKind",
+    "PackingInteractionRef",
     "CellRange",
     "ContactMaterializer",
     "HydrogenBondCandidate",
