@@ -132,6 +132,12 @@ from .packing_models import (
     PackingInteractionRef,
 )
 from .packing import PackingAnalyzer
+from .packing_materialization import (
+    MaterializedMolecule,
+    MaterializedPackingConnection,
+    MaterializedPackingGraph,
+    PackingMaterializer,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -145,6 +151,10 @@ __all__ = [
     "PackingInteractionKind",
     "PackingInteractionRef",
     "PackingAnalyzer",
+    "MaterializedMolecule",
+    "MaterializedPackingConnection",
+    "MaterializedPackingGraph",
+    "PackingMaterializer",
     "CellRange",
     "ContactMaterializer",
     "HydrogenBondCandidate",

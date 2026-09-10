@@ -332,6 +332,28 @@ describes the same molecular pair relation. Connected-component rank is an
 exact periodic-connectivity result only; CrIStMa does not assign interaction
 energies, motif names, a preferred packing hierarchy, or presentation state.
 
+Explicit instances are created only at the outward materialization boundary:
+
+```python
+from cristma.crystal_chemistry import (
+    PackingInteractionKind,
+    PackingMaterializer,
+    ReferenceCell,
+)
+
+packing_view = PackingMaterializer().materialize(
+    packing,
+    ReferenceCell(),
+    # Optional scientific-evidence filter:
+    interaction_kinds=(PackingInteractionKind.PI_STACKING,),
+)
+```
+
+The result contains materialized molecules and connections with stable source
+orbit IDs, exact periodic relations, reference-cell atom IDs, and cell
+translations. Connections across a cell boundary retain their neighbouring
+molecule endpoint, while canonical ownership prevents duplicate edges.
+
 Intermolecular contacts reuse that same bounded pair table; they never launch
 a second neighbour search:
 
