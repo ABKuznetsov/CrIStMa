@@ -678,7 +678,7 @@ precision, collapses redundant symmetry-expanded CIF atom rows conservatively,
 and preserves incomplete polyhedra when hull geometry is unusable. The
 local `0.1.0b7` development line adds orbit-first molecular bond and component
 analysis with explicit normalized-distance policy and exact periodic-rank
-classification. The current `0.1.0b8` development line adds the one-call
+classification. The current `0.1.0b9` development line adds the one-call
 powder-pattern facade while retaining every intermediate reciprocal result and
 keeping instrument and phase-local sample broadening explicit, plus bounded
 molecular rings, pi-system, pi-stacking, and explicit C-H/C-D...pi geometry.
