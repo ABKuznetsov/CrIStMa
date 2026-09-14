@@ -138,15 +138,28 @@ from .packing_materialization import (
     MaterializedPackingGraph,
     PackingMaterializer,
 )
+from .reticular import ReticularAnalyzer
+from .reticular_models import (
+    CoordinationNodeOrbit,
+    LigandComponentOrbit,
+    LigandRole,
+    ReticularComponent,
+    ReticularComponentKind,
+    ReticularConnectionOrbit,
+    ReticularPrecursorGraph,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
+    "CoordinationNodeOrbit",
     "CHPiAnalysisResult",
     "CHPiAnalyzer",
     "CHPiCandidate",
     "CHPiPolicy",
     "MolecularPackingComponent",
     "MolecularPackingGraph",
+    "LigandComponentOrbit",
+    "LigandRole",
     "PackingConnectionOrbit",
     "PackingInteractionKind",
     "PackingInteractionRef",
@@ -241,6 +254,11 @@ __all__ = [
     "StructuralRingOrbit",
     "StructuralRingScope",
     "ReferenceCell",
+    "ReticularAnalyzer",
+    "ReticularComponent",
+    "ReticularComponentKind",
+    "ReticularConnectionOrbit",
+    "ReticularPrecursorGraph",
     "polyhedron_face_signature",
     "canonical_face_signature",
     "unique_hull_edges",
