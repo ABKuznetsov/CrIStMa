@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from cristma.chemistry import DecompositionMode
 from cristma.crystallography import PeriodicSymmetryRelation
-from cristma.crystallography.pair_canonical import canonical_instance_owner
+from cristma.crystallography.pair_canonical import periodic_endpoint_instance
 from cristma.crystallography.symmetry_context import _digest
 
 from .contact_analysis import ContactAnalysisResult
@@ -66,10 +66,58 @@ def _canonical_directed_relation(
     )
 
 
+def _subtract(
+    left: tuple[int, int, int], right: tuple[int, int, int]
+) -> tuple[int, int, int]:
+    return tuple(left[index] - right[index] for index in range(3))  # type: ignore[return-value]
+
+
+def _component_instance_endpoints(component, relation, mapping, context):
+    endpoints = set()
+    stabilizer = molecular_component_stabilizer(component, context)
+    for site_id, site_relation in component.image_relations:
+        for internal in stabilizer:
+            endpoints.add(
+                periodic_endpoint_instance(
+                    site_id,
+                    relation.compose(internal, context).compose(
+                        site_relation, context
+                    ),
+                    mapping,
+                )
+            )
+    return tuple(sorted(endpoints))
+
+
+def _node_component_pair_key(
+    center_site_id,
+    component,
+    node_relation,
+    component_relation,
+    mapping,
+    context,
+):
+    node = periodic_endpoint_instance(center_site_id, node_relation, mapping)
+    ligand = _component_instance_endpoints(
+        component, component_relation, mapping, context
+    )
+    anchors = {node[2], *(item[2] for item in ligand)}
+    return min(
+        (
+            (node[0], node[1], _subtract(node[2], anchor)),
+            tuple(
+                (item[0], item[1], _subtract(item[2], anchor))
+                for item in ligand
+            ),
+        )
+        for anchor in anchors
+    )
+
+
 def _connection_multiplicity(
     center_site_id: str,
-    ligand_anchor_site_id: str,
-    relation: PeriodicSymmetryRelation,
+    component,
+    attachment_relations: tuple[PeriodicSymmetryRelation, ...],
     contact_result: ContactAnalysisResult,
 ) -> int:
     context = contact_result._symmetry_context
@@ -77,15 +125,17 @@ def _connection_multiplicity(
     owners = set()
     for operation_key in context.operation_keys:
         action = PeriodicSymmetryRelation(operation_key, (0, 0, 0))
-        owners.add(
-            canonical_instance_owner(
-                center_site_id,
-                action,
-                ligand_anchor_site_id,
-                action.compose(relation, context),
-                mapping,
+        for relation in attachment_relations:
+            owners.add(
+                _node_component_pair_key(
+                    center_site_id,
+                    component,
+                    action,
+                    action.compose(relation, context),
+                    mapping,
+                    context,
+                )
             )
-        )
     return len(owners)
 
 
@@ -94,7 +144,6 @@ class _ConnectionSeed:
     node_id: str
     ligand_id: str
     center_site_id: str
-    ligand_anchor_site_id: str
     relation: PeriodicSymmetryRelation
     attachment_relations: tuple[PeriodicSymmetryRelation, ...]
     donor_site_id: str
@@ -235,7 +284,6 @@ class ReticularAnalyzer:
                     node_id,
                     ligand_id,
                     center_site_id,
-                    component.independent_site_ids[0],
                     relation,
                     attachment_relations,
                     incidence.ligand_independent_site_id,
@@ -257,6 +305,7 @@ class ReticularAnalyzer:
         connection_orbits: list[ReticularConnectionOrbit] = []
         for (node_id, ligand_id, relation), group in sorted(grouped_seeds.items()):
             first = group[0]
+            component = component_by_site[first.donor_site_id]
             attachment_relations = tuple(sorted(set(
                 attachment_relation
                 for item in group
@@ -284,8 +333,8 @@ class ReticularAnalyzer:
                     tuple(sorted({item.interpretation_id for item in group})),
                     _connection_multiplicity(
                         first.center_site_id,
-                        first.ligand_anchor_site_id,
-                        relation,
+                        component,
+                        attachment_relations,
                         contact_result,
                     ),
                     _status(*(item.status for item in group)),
