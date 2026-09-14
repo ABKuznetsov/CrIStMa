@@ -96,6 +96,7 @@ class _ConnectionSeed:
     center_site_id: str
     ligand_anchor_site_id: str
     relation: PeriodicSymmetryRelation
+    attachment_relations: tuple[PeriodicSymmetryRelation, ...]
     donor_site_id: str
     resolved_contact_orbit_id: str
     interpretation_id: str
@@ -204,16 +205,29 @@ class ReticularAnalyzer:
                 {"source_component_orbit_id": component.component_orbit_id}
             )
             component_images = dict(component.image_relations)
-            raw_relation = incidence.oriented_periodic_relation.compose(
-                component_images[incidence.ligand_independent_site_id].inverse(context),
-                context,
-            )
-            relation = _canonical_directed_relation(
-                raw_relation,
-                mapping.by_site_id[center_site_id].stabilizer_relations,
-                molecular_component_stabilizer(component, context),
-                context,
-            )
+            attachment_relations = tuple(sorted(set(
+                oriented_relation.compose(
+                    component_images[
+                        incidence.ligand_independent_site_id
+                    ].inverse(context),
+                    context,
+                )
+                for oriented_relation in incidence.equivalent_oriented_relations
+            )))
+            canonical_relations = {
+                _canonical_directed_relation(
+                    attachment_relation,
+                    mapping.by_site_id[center_site_id].stabilizer_relations,
+                    molecular_component_stabilizer(component, context),
+                    context,
+                )
+                for attachment_relation in attachment_relations
+            }
+            if len(canonical_relations) != 1:
+                raise ValueError(
+                    "one incidence orbit produced multiple node-ligand orbit identities"
+                )
+            relation = next(iter(canonical_relations))
             contact = contact_by_id[incidence.resolved_contact_orbit_id]
             seed_status = _status(shell.status, incidence.status, contact.status)
             seeds.append(
@@ -223,6 +237,7 @@ class ReticularAnalyzer:
                     center_site_id,
                     component.independent_site_ids[0],
                     relation,
+                    attachment_relations,
                     incidence.ligand_independent_site_id,
                     incidence.resolved_contact_orbit_id,
                     incidence.interpretation_id,
@@ -242,6 +257,11 @@ class ReticularAnalyzer:
         connection_orbits: list[ReticularConnectionOrbit] = []
         for (node_id, ligand_id, relation), group in sorted(grouped_seeds.items()):
             first = group[0]
+            attachment_relations = tuple(sorted(set(
+                attachment_relation
+                for item in group
+                for attachment_relation in item.attachment_relations
+            )))
             connection_id = "reticular-connection-orbit:" + _digest(
                 {
                     "node_orbit_id": node_id,
@@ -258,6 +278,7 @@ class ReticularAnalyzer:
                     node_id,
                     ligand_id,
                     relation,
+                    attachment_relations,
                     tuple(sorted({item.donor_site_id for item in group})),
                     tuple(sorted({item.resolved_contact_orbit_id for item in group})),
                     tuple(sorted({item.interpretation_id for item in group})),
@@ -325,6 +346,7 @@ class ReticularAnalyzer:
                     component.bond_orbit_ids,
                     tuple(item.connection_orbit_id for item in attached),
                     role,
+                    attachments_per_instance,
                     component.multiplicity_in_reference_cell,
                     _status(component.status, *(item.status for item in attached)),
                     provenance=(

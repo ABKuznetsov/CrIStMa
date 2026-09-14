@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from cristma.crystallography import PeriodicSymmetryRelation
+from cristma.crystallography.symmetry_context import _digest
 from cristma.diagnostics import Diagnostic
 
 from .models import ResolutionStatus
@@ -105,6 +106,7 @@ class LigandComponentOrbit:
     bond_orbit_ids: tuple[str, ...]
     connection_orbit_ids: tuple[str, ...]
     role: LigandRole
+    attachment_count_per_ligand_instance: int
     multiplicity_in_reference_cell: int
     status: ResolutionStatus
     diagnostics: tuple[Diagnostic, ...] = ()
@@ -122,6 +124,20 @@ class LigandComponentOrbit:
         )
         if not isinstance(self.role, LigandRole):
             raise TypeError("ligand role must be LigandRole")
+        if (
+            isinstance(self.attachment_count_per_ligand_instance, bool)
+            or not isinstance(self.attachment_count_per_ligand_instance, int)
+        ):
+            raise TypeError("ligand attachment count must be an integer")
+        if self.attachment_count_per_ligand_instance <= 0:
+            raise ValueError("ligand attachment count must be positive")
+        expected_role = (
+            LigandRole.TERMINAL
+            if self.attachment_count_per_ligand_instance == 1
+            else LigandRole.LINKER
+        )
+        if self.role is not expected_role:
+            raise ValueError("ligand role and attachment count disagree")
         _validate_multiplicity(self.multiplicity_in_reference_cell, "ligand")
         _validate_key_values(self.provenance, "ligand provenance")
 
@@ -132,6 +148,7 @@ class ReticularConnectionOrbit:
     node_orbit_id: str
     ligand_orbit_id: str
     canonical_node_ligand_relation: PeriodicSymmetryRelation
+    equivalent_node_ligand_relations: tuple[PeriodicSymmetryRelation, ...]
     donor_independent_site_ids: tuple[str, ...]
     source_resolved_contact_orbit_ids: tuple[str, ...]
     interpretation_ids: tuple[str, ...]
@@ -148,6 +165,14 @@ class ReticularConnectionOrbit:
             self.canonical_node_ligand_relation, PeriodicSymmetryRelation
         ):
             raise TypeError("reticular connection requires an exact periodic relation")
+        if (
+            not self.equivalent_node_ligand_relations
+            or self.equivalent_node_ligand_relations
+            != tuple(sorted(set(self.equivalent_node_ligand_relations)))
+        ):
+            raise ValueError(
+                "equivalent node-ligand relations must be non-empty, unique, and sorted"
+            )
         _validate_sorted_ids(
             self.donor_independent_site_ids, "reticular donor", required=True
         )
@@ -328,6 +353,44 @@ class ReticularPrecursorGraph:
             raise ValueError("incomplete reticular result must propagate")
         _validate_key_values(self.configuration, "reticular graph configuration")
         _validate_key_values(self.provenance, "reticular graph provenance")
+
+    @property
+    def fingerprint(self) -> str:
+        """Return deterministic lineage identity for dependent calculations."""
+
+        return _digest(
+            {
+                "contact_analysis_fingerprint": self._contact_analysis.fingerprint,
+                "molecular_contact_analysis_fingerprint": (
+                    self._molecular_analysis.contact_analysis_fingerprint
+                ),
+                "node_orbit_ids": tuple(
+                    item.node_orbit_id for item in self.node_orbits
+                ),
+                "ligands": tuple(
+                    (
+                        item.ligand_orbit_id,
+                        item.attachment_count_per_ligand_instance,
+                        item.role.value,
+                    )
+                    for item in self.ligand_orbits
+                ),
+                "connections": tuple(
+                    (
+                        item.connection_orbit_id,
+                        tuple(
+                            (relation.operation_key, relation.lattice_translation)
+                            for relation in item.equivalent_node_ligand_relations
+                        ),
+                    )
+                    for item in self.connection_orbits
+                ),
+                "component_ids": tuple(
+                    item.component_id for item in self.components
+                ),
+                "configuration": self.configuration,
+            }
+        )
 
 
 __all__ = [
