@@ -66,54 +66,6 @@ def _canonical_directed_relation(
     )
 
 
-def _subtract(
-    left: tuple[int, int, int], right: tuple[int, int, int]
-) -> tuple[int, int, int]:
-    return tuple(left[index] - right[index] for index in range(3))  # type: ignore[return-value]
-
-
-def _component_instance_endpoints(component, relation, mapping, context):
-    endpoints = set()
-    stabilizer = molecular_component_stabilizer(component, context)
-    for site_id, site_relation in component.image_relations:
-        for internal in stabilizer:
-            endpoints.add(
-                periodic_endpoint_instance(
-                    site_id,
-                    relation.compose(internal, context).compose(
-                        site_relation, context
-                    ),
-                    mapping,
-                )
-            )
-    return tuple(sorted(endpoints))
-
-
-def _node_component_pair_key(
-    center_site_id,
-    component,
-    node_relation,
-    component_relation,
-    mapping,
-    context,
-):
-    node = periodic_endpoint_instance(center_site_id, node_relation, mapping)
-    ligand = _component_instance_endpoints(
-        component, component_relation, mapping, context
-    )
-    anchors = {node[2], *(item[2] for item in ligand)}
-    return min(
-        (
-            (node[0], node[1], _subtract(node[2], anchor)),
-            tuple(
-                (item[0], item[1], _subtract(item[2], anchor))
-                for item in ligand
-            ),
-        )
-        for anchor in anchors
-    )
-
-
 def _connection_multiplicity(
     center_site_id: str,
     component,
@@ -122,21 +74,17 @@ def _connection_multiplicity(
 ) -> int:
     context = contact_result._symmetry_context
     mapping = contact_result._asymmetric_unit_mapping
-    owners = set()
-    for operation_key in context.operation_keys:
-        action = PeriodicSymmetryRelation(operation_key, (0, 0, 0))
-        for relation in attachment_relations:
-            owners.add(
-                _node_component_pair_key(
-                    center_site_id,
-                    component,
-                    action,
-                    action.compose(relation, context),
-                    mapping,
-                    context,
-                )
-            )
-    return len(owners)
+    attached_sbu_instances = {
+        periodic_endpoint_instance(
+            center_site_id,
+            relation.inverse(context),
+            mapping,
+        )
+        for relation in attachment_relations
+    }
+    return (
+        len(attached_sbu_instances) * component.multiplicity_in_reference_cell
+    )
 
 
 @dataclass(frozen=True, slots=True)
