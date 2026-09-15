@@ -15,7 +15,11 @@ from cristma.core.precision import reported_numeric_error
 from cristma.crystallography.catalog import SpaceGroupCatalog
 from cristma.crystallography.orbit import assign_wyckoff, build_orbit
 from cristma.crystallography.space_group import SpaceGroupSetting
-from cristma.crystallography.symmetry_context import canonical_operation_key
+from cristma.crystallography.symmetry_context import (
+    SymmetryContext,
+    SymmetryContextInvariantError,
+    canonical_operation_key,
+)
 from cristma.structure import (
     CrystalStructure,
     DisplacementParameters,
@@ -349,6 +353,54 @@ def _symmetry(
         )
         catalog_setting = None
     return definition, catalog_setting
+
+
+def _recover_derived_symmetry_for_metric(
+    symmetry: SpaceGroupDefinition,
+    catalog_setting: SpaceGroupSetting | None,
+    cell: UnitCell,
+    diagnostics: list[Diagnostic],
+) -> tuple[SpaceGroupDefinition, SpaceGroupSetting | None]:
+    """Keep usable coordinates when catalog operations use another cell basis."""
+
+    if symmetry.provenance != "derived":
+        return symmetry, catalog_setting
+    try:
+        SymmetryContext.from_definition(symmetry, cell)
+    except SymmetryContextInvariantError as error:
+        if error.code != "symmetry.context.metric_incompatible":
+            raise
+        evidence = dict(error.evidence)
+        residual = evidence.get("maximum_normalized_residual")
+        diagnostics.append(
+            Diagnostic(
+                Severity.WARNING,
+                "cif.map.symmetry_basis_incompatible_identity_fallback",
+                "Catalog-derived symmetry operations are incompatible with the "
+                "reported cell basis; all reported atomic coordinates were retained "
+                "and identity symmetry is used for direct-space calculations.",
+                recovery=(
+                    "identity symmetry; reported space-group metadata retained"
+                    + (
+                        f"; maximum normalized metric residual={residual:.8g}"
+                        if isinstance(residual, float)
+                        else ""
+                    )
+                ),
+            )
+        )
+        identity = parse_xyz_operation(
+            "x,y,z", operation_id="op:metric-identity-fallback"
+        )
+        return (
+            replace(
+                symmetry,
+                operations=(identity,),
+                provenance="identity_fallback",
+            ),
+            None,
+        )
+    return symmetry, catalog_setting
 
 
 def _optional_measured(
@@ -1207,6 +1259,12 @@ def map_cif_structures(
         if symmetry_result is None:
             continue
         symmetry, catalog_setting = symmetry_result
+        symmetry, catalog_setting = _recover_derived_symmetry_for_metric(
+            symmetry,
+            catalog_setting,
+            cell,
+            diagnostics,
+        )
         sites = _sites(block, diagnostics)
         if sites is None:
             continue

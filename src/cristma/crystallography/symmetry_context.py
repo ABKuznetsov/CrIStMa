@@ -23,6 +23,7 @@ from .space_group import SpaceGroupSetting
 
 
 DEFAULT_METRIC_TOLERANCE = 1e-8
+DEFAULT_DERIVED_METRIC_TOLERANCE = 2e-5
 
 _IDENTITY_ROTATION: Matrix3 = (
     (Fraction(1), Fraction(0), Fraction(0)),
@@ -614,14 +615,45 @@ class SymmetryContext:
             ("setting", definition.setting),
             ("origin_choice", definition.origin_choice),
         )
+        build_arguments = {
+            "setting_id": None,
+            "source_kind": source_kind,
+            "provenance": provenance,
+        }
+        try:
+            return cls._build(
+                definition.operations,
+                cell,
+                diagnostics=diagnostics,
+                metric_tolerance=metric_tolerance,
+                **build_arguments,
+            )
+        except SymmetryContextInvariantError as error:
+            if (
+                definition.provenance != "derived"
+                or error.code != "symmetry.context.metric_incompatible"
+                or metric_tolerance >= DEFAULT_DERIVED_METRIC_TOLERANCE
+            ):
+                raise
+        recovered_diagnostics = (
+            *diagnostics,
+            Diagnostic(
+                Severity.WARNING,
+                "symmetry.context.metric_within_derived_cell_tolerance",
+                "Catalog-derived symmetry was accepted within the numerical "
+                "cell tolerance used for computed structures.",
+                recovery=(
+                    f"configured tolerance={metric_tolerance:.8g}; "
+                    f"derived-cell tolerance={DEFAULT_DERIVED_METRIC_TOLERANCE:.8g}"
+                ),
+            ),
+        )
         return cls._build(
             definition.operations,
             cell,
-            setting_id=None,
-            source_kind=source_kind,
-            diagnostics=diagnostics,
-            provenance=provenance,
-            metric_tolerance=metric_tolerance,
+            diagnostics=recovered_diagnostics,
+            metric_tolerance=DEFAULT_DERIVED_METRIC_TOLERANCE,
+            **build_arguments,
         )
 
     @classmethod
