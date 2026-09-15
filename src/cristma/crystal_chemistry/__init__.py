@@ -148,6 +148,23 @@ from .reticular_models import (
     ReticularConnectionOrbit,
     ReticularPrecursorGraph,
 )
+from .sbu import SecondaryBuildingUnitAnalyzer
+from .sbu_models import (
+    SBUAtomMember,
+    SBUAtomSourceRole,
+    SecondaryBuildingUnitOrbit,
+    SecondaryBuildingUnitResult,
+)
+from .reticular_net import ReticularNetAnalyzer
+from .reticular_net_models import (
+    ReticularAttachmentRef,
+    ReticularNetComponent,
+    ReticularNetComponentKind,
+    ReticularNetEdgeOrbit,
+    ReticularNetResult,
+    ReticularNetVertexKind,
+    ReticularNetVertexOrbit,
+)
 
 __all__ = [
     "ComponentPairInterpretation",
@@ -255,10 +272,23 @@ __all__ = [
     "StructuralRingScope",
     "ReferenceCell",
     "ReticularAnalyzer",
+    "ReticularAttachmentRef",
     "ReticularComponent",
     "ReticularComponentKind",
     "ReticularConnectionOrbit",
+    "ReticularNetAnalyzer",
+    "ReticularNetComponent",
+    "ReticularNetComponentKind",
+    "ReticularNetEdgeOrbit",
+    "ReticularNetResult",
+    "ReticularNetVertexKind",
+    "ReticularNetVertexOrbit",
     "ReticularPrecursorGraph",
+    "SBUAtomMember",
+    "SBUAtomSourceRole",
+    "SecondaryBuildingUnitAnalyzer",
+    "SecondaryBuildingUnitOrbit",
+    "SecondaryBuildingUnitResult",
     "polyhedron_face_signature",
     "canonical_face_signature",
     "unique_hull_edges",
